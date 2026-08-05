@@ -14,6 +14,8 @@ Docker Compose 自动读取 `.env`。默认宿主机端口为 PostgreSQL `15432`
 
 阶段 1 新增的 `ACCESS_TOKEN_SECRET` 至少为 32 个字符。生产环境必须使用独立随机值，并将 `AUTH_COOKIE_SECURE` 设置为 `true`。
 
+阶段 2 的 Web 默认通过 `API_INTERNAL_URL=http://localhost:3001` 在服务端代理 `/api/v1`。浏览器客户端始终使用同源相对地址，不要把内部 API 地址或任何密钥放入前端代码。
+
 ## 验证基础设施
 
 ```bash
@@ -31,9 +33,13 @@ pnpm db:migrate:deploy
 
 生产部署只使用 `db:migrate:deploy`。开发迁移命令 `db:migrate:dev` 会生成新迁移，只能在明确修改 Schema 时运行。
 
-## 阶段 1 认证调用
+## 认证调用
 
 客户端先调用 `GET /api/v1/auth/csrf`。后续写请求必须携带 Cookie，并把响应中的 `csrfToken` 放入 `x-csrf-token` 请求头。访问令牌和刷新令牌为 HttpOnly Cookie，不应由浏览器脚本读取。
+
+## 阶段 2 聊天壳层
+
+访问 `http://localhost:3000/login` 注册或登录。新建对话后，输入框会持久化用户消息并返回固定 assistant 消息；该阶段不会发起任何 LLM 请求。对话、消息、归档状态、已读时间和滚动位置都保存在 PostgreSQL，刷新页面后仍会恢复。
 
 ## E2E 测试
 

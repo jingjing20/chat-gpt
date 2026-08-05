@@ -7,6 +7,11 @@ node_modules/
 .next/
 .turbo/
 coverage/
+playwright-report/
+test-results/
+# Next.js 开发服务器自动生成的代理说明文件
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
 dist/
 *.tsbuildinfo
 

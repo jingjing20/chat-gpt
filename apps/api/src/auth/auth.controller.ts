@@ -137,7 +137,7 @@ export class AuthController {
       httpOnly: false,
       secure: this.env.AUTH_COOKIE_SECURE,
       sameSite: 'lax',
-      path: '/api/v1',
+      path: '/',
       maxAge: this.env.REFRESH_TOKEN_TTL_SECONDS * 1000,
     });
   }
@@ -145,7 +145,7 @@ export class AuthController {
   private clearAuthCookies(response: Response): void {
     response.clearCookie(ACCESS_COOKIE, { path: '/api/v1' });
     response.clearCookie(REFRESH_COOKIE, { path: '/api/v1/auth' });
-    response.clearCookie(CSRF_COOKIE, { path: '/api/v1' });
+    response.clearCookie(CSRF_COOKIE, { path: '/' });
   }
 
   private context(request: Request): RequestContext {

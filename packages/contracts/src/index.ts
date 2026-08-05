@@ -59,3 +59,74 @@ export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 export type ProtectedResourceResponse = z.infer<
   typeof protectedResourceResponseSchema
 >;
+
+export const conversationTitleSchema = z.string().trim().min(1).max(120);
+
+export const createConversationRequestSchema = z.object({
+  title: conversationTitleSchema.default('新对话'),
+});
+
+export const renameConversationRequestSchema = z.object({
+  title: conversationTitleSchema,
+});
+
+export const updateScrollPositionRequestSchema = z.object({
+  scrollOffset: z.number().int().min(0).max(10_000_000),
+});
+
+export const createMessageRequestSchema = z.object({
+  content: z.string().trim().min(1).max(20_000),
+});
+
+export const messageRoleSchema = z.enum(['USER', 'ASSISTANT', 'SYSTEM']);
+
+export const conversationResponseSchema = z.object({
+  id: z.string().uuid(),
+  title: conversationTitleSchema,
+  archivedAt: z.string().datetime().nullable(),
+  lastReadAt: z.string().datetime().nullable(),
+  scrollOffset: z.number().int().nonnegative(),
+  lastMessageAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const conversationListResponseSchema = z.object({
+  items: z.array(conversationResponseSchema),
+});
+
+export const messageResponseSchema = z.object({
+  id: z.string().uuid(),
+  conversationId: z.string().uuid(),
+  role: messageRoleSchema,
+  content: z.string(),
+  createdAt: z.string().datetime(),
+});
+
+export const messagePageResponseSchema = z.object({
+  items: z.array(messageResponseSchema),
+  nextCursor: z.string().nullable(),
+});
+
+export const createMessageResponseSchema = z.object({
+  userMessage: messageResponseSchema,
+  assistantMessage: messageResponseSchema,
+});
+
+export type CreateConversationRequest = z.infer<
+  typeof createConversationRequestSchema
+>;
+export type RenameConversationRequest = z.infer<
+  typeof renameConversationRequestSchema
+>;
+export type UpdateScrollPositionRequest = z.infer<
+  typeof updateScrollPositionRequestSchema
+>;
+export type CreateMessageRequest = z.infer<typeof createMessageRequestSchema>;
+export type ConversationResponse = z.infer<typeof conversationResponseSchema>;
+export type ConversationListResponse = z.infer<
+  typeof conversationListResponseSchema
+>;
+export type MessageResponse = z.infer<typeof messageResponseSchema>;
+export type MessagePageResponse = z.infer<typeof messagePageResponseSchema>;
+export type CreateMessageResponse = z.infer<typeof createMessageResponseSchema>;

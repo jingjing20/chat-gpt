@@ -29,8 +29,15 @@ export const workerEnvSchema = infrastructureSchema.extend({
   WORKER_HEALTH_PORT: z.coerce.number().int().min(1).max(65_535).default(3002),
 });
 
+export const webEnvSchema = z.object({
+  NODE_ENV: nodeEnvSchema.default('development'),
+  WEB_PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
+  API_INTERNAL_URL: z.string().url().default('http://localhost:3001'),
+});
+
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;
+export type WebEnv = z.infer<typeof webEnvSchema>;
 
 export function readApiEnv(environment: NodeJS.ProcessEnv): ApiEnv {
   return apiEnvSchema.parse(environment);
@@ -38,4 +45,8 @@ export function readApiEnv(environment: NodeJS.ProcessEnv): ApiEnv {
 
 export function readWorkerEnv(environment: NodeJS.ProcessEnv): WorkerEnv {
   return workerEnvSchema.parse(environment);
+}
+
+export function readWebEnv(environment: NodeJS.ProcessEnv): WebEnv {
+  return webEnvSchema.parse(environment);
 }

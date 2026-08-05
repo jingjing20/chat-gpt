@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import { QueryProvider } from '@/components/query-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Concurrent Chat',
-  description: 'A resilient multi-conversation streaming AI chat application.',
+  description: '支持多用户隔离的并发聊天应用。',
 };
 
 export default function RootLayout({
@@ -11,7 +12,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>
+        <QueryProvider>{children}</QueryProvider>
+      </body>
     </html>
   );
 }

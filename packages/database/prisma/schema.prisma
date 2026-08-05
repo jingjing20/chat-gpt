@@ -26,31 +26,85 @@ enum AuditOutcome {
   FAILED
 }
 
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
 model User {
-  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email           String           @unique @db.Citext
-  passwordHash    String           @map("password_hash")
-  status          UserStatus       @default(ACTIVE)
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
-  refreshSessions RefreshSession[]
-  auditLogs       AuditLog[]
+  id                 String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email              String                  @unique @db.Citext
+  passwordHash       String                  @map("password_hash")
+  status             UserStatus              @default(ACTIVE)
+  createdAt          DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  refreshSessions    RefreshSession[]
+  auditLogs          AuditLog[]
+  conversations      Conversation[]
+  conversationStates ConversationUserState[]
+  messages           Message[]
 
   @@map("users")
 }
 
+model Conversation {
+  id            String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerUserId   String                  @map("owner_user_id") @db.Uuid
+  title         String                  @db.VarChar(120)
+  lastMessageAt DateTime?               @map("last_message_at") @db.Timestamptz(3)
+  createdAt     DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  owner         User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  userStates    ConversationUserState[]
+  messages      Message[]
+
+  @@index([ownerUserId, updatedAt(sort: Desc), id(sort: Desc)])
+  @@map("conversations")
+}
+
+model ConversationUserState {
+  conversationId String       @map("conversation_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  archivedAt     DateTime?    @map("archived_at") @db.Timestamptz(3)
+  lastReadAt     DateTime?    @map("last_read_at") @db.Timestamptz(3)
+  scrollOffset   Int          @default(0) @map("scroll_offset")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId, archivedAt, updatedAt(sort: Desc)])
+  @@map("conversation_user_states")
+}
+
+model Message {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  authorUserId   String?      @map("author_user_id") @db.Uuid
+  role           MessageRole
+  content        String       @db.Text
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author         User?        @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("messages")
+}
+
 model RefreshSession {
-  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId          String          @map("user_id") @db.Uuid
-  tokenHash       String          @unique @map("token_hash") @db.Char(64)
-  userAgentHash   String?         @map("user_agent_hash") @db.Char(64)
-  expiresAt       DateTime        @map("expires_at") @db.Timestamptz(3)
-  revokedAt       DateTime?       @map("revoked_at") @db.Timestamptz(3)
-  rotatedFromId   String?         @unique @map("rotated_from_id") @db.Uuid
-  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  rotatedFrom     RefreshSession? @relation("SessionRotation", fields: [rotatedFromId], references: [id], onDelete: SetNull)
-  rotatedTo       RefreshSession? @relation("SessionRotation")
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String          @map("user_id") @db.Uuid
+  tokenHash     String          @unique @map("token_hash") @db.Char(64)
+  userAgentHash String?         @map("user_agent_hash") @db.Char(64)
+  expiresAt     DateTime        @map("expires_at") @db.Timestamptz(3)
+  revokedAt     DateTime?       @map("revoked_at") @db.Timestamptz(3)
+  rotatedFromId String?         @unique @map("rotated_from_id") @db.Uuid
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rotatedFrom   RefreshSession? @relation("SessionRotation", fields: [rotatedFromId], references: [id], onDelete: SetNull)
+  rotatedTo     RefreshSession? @relation("SessionRotation")
 
   @@index([userId, revokedAt, expiresAt])
   @@map("refresh_sessions")

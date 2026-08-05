@@ -1,9 +1,10 @@
 import { readApiEnv } from '@chat/config';
-import { Logger, RequestMethod } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { config as loadEnv } from 'dotenv';
 import { resolve } from 'node:path';
 import { AppModule } from './app.module';
+import { configureApp } from './configure-app';
 
 async function bootstrap() {
   loadEnv({
@@ -13,12 +14,7 @@ async function bootstrap() {
   const environment = readApiEnv(process.env);
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
-  app.setGlobalPrefix('api/v1', {
-    exclude: [
-      { path: 'health/live', method: RequestMethod.GET },
-      { path: 'health/ready', method: RequestMethod.GET },
-    ],
-  });
+  configureApp(app);
 
   await app.listen(environment.API_PORT, '0.0.0.0');
   Logger.log(

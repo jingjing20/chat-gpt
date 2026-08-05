@@ -1,3 +1,3 @@
-# Container images
+# 容器镜像
 
-Production Dockerfiles for `web`, `api`, and `worker` will be added with the deployment phase. Local phase-0 development uses the services in `infra/compose/compose.yml` and runs application processes on the host for fast feedback.
+`web`、`api` 和 `worker` 的生产 Dockerfile 将在部署阶段加入。当前本地开发使用 `infra/compose/compose.yml` 中的基础设施服务，并在宿主机运行应用进程，以获得更快反馈。

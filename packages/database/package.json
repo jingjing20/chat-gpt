@@ -1,0 +1,28 @@
+{
+  "name": "@chat/database",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "prisma"
+  ],
+  "scripts": {
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+    "db:generate": "prisma generate",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:test:prepare": "prisma migrate deploy",
+    "format": "prisma format",
+    "typecheck": "prisma generate && tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prisma": "6.19.3",
+    "typescript": "^5.9.2"
+  }
+}

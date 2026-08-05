@@ -10,6 +10,19 @@ const infrastructureSchema = z.object({
 
 export const apiEnvSchema = infrastructureSchema.extend({
   API_PORT: z.coerce.number().int().min(1).max(65_535).default(3001),
+  ACCESS_TOKEN_SECRET: z.string().min(32),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).default(900),
+  REFRESH_TOKEN_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(3600)
+    .default(2_592_000),
+  AUTH_COOKIE_SECURE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
+  AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(1).default(60),
 });
 
 export const workerEnvSchema = infrastructureSchema.extend({

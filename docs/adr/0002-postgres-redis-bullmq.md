@@ -1,21 +1,21 @@
-# ADR-0002: PostgreSQL, Redis Streams, and BullMQ
+# ADR-0002：PostgreSQL、Redis Streams 与 BullMQ
 
-- Status: Accepted
-- Date: 2026-08-04
+- 状态：已接受
+- 日期：2026-08-04
 
-## Context
+## 背景
 
-Generation tasks must outlive HTTP requests and browser routes. Final chat history needs durable relational storage, while active token events need low-latency publishing and a bounded replay window.
+生成任务必须独立于 HTTP 请求和浏览器路由继续运行。最终聊天历史需要持久关系型存储，活动 Token 事件需要低延迟发布和有限重放窗口。
 
-## Decision
+## 决策
 
-- PostgreSQL is the system of record for users, conversations, messages, generations, attempts, usage, and outbox events.
-- BullMQ provides generation scheduling, worker ownership, retries before the first delta, and concurrency control.
-- Redis stores active snapshots and bounded user/generation event streams.
-- Assistant content is checkpointed periodically and forced to PostgreSQL at every terminal transition.
+- PostgreSQL 是用户、对话、消息、生成任务、尝试记录、用量和 Outbox 事件的事实来源。
+- BullMQ 负责生成任务调度、Worker 所有权、首个增量前的重试和并发控制。
+- Redis 保存活动快照，以及容量受限的用户级和生成任务级事件流。
+- 助手内容定期写入检查点，并在每个终态强制写入 PostgreSQL。
 
-## Consequences
+## 影响
 
-- Tokens are not written to PostgreSQL one transaction at a time.
-- Redis loss may fail an active generation, but cannot remove an already persisted final answer.
-- The API uses a transactional outbox instead of an unsafe database/queue dual write.
+- 不会为每个 Token 单独执行一次 PostgreSQL 事务。
+- Redis 数据丢失可能导致活动生成任务失败，但不能删除已持久化的最终回答。
+- API 使用事务 Outbox，避免不安全的数据库与队列双写。

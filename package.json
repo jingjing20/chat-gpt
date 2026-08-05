@@ -20,10 +20,14 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
+    "test:e2e:prepare": "pnpm --filter @chat/database db:test:prepare",
     "typecheck": "turbo run typecheck",
     "infra:up": "docker compose -f infra/compose/compose.yml up -d",
     "infra:down": "docker compose -f infra/compose/compose.yml down",
-    "infra:logs": "docker compose -f infra/compose/compose.yml logs -f"
+    "infra:logs": "docker compose -f infra/compose/compose.yml logs -f",
+    "db:generate": "pnpm --filter @chat/database db:generate",
+    "db:migrate:deploy": "pnpm --filter @chat/database db:migrate:deploy",
+    "db:migrate:dev": "pnpm --filter @chat/database db:migrate:dev"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

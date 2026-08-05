@@ -1,20 +1,20 @@
-# ADR-0003: User-level SSE multiplexing
+# ADR-0003：用户级 SSE 多路复用
 
-- Status: Accepted
-- Date: 2026-08-04
+- 状态：已接受
+- 日期：2026-08-04
 
-## Context
+## 背景
 
-One user can run several generations across multiple conversations. Opening one browser connection per generation wastes connections and makes routing changes harder to reason about.
+同一用户可以在多个对话中同时运行生成任务。每个生成任务建立一条浏览器连接会浪费连接，也会让路由切换更难推理。
 
-## Decision
+## 决策
 
-Each browser tab maintains one authenticated user-level SSE-over-fetch connection. Events include conversation and generation identifiers. A root-level `GenerationManager` demultiplexes them into a normalized browser store.
+每个浏览器标签页只维护一条经过认证、基于 `fetch` 的用户级 SSE 连接。事件包含对话和生成任务标识，由根级 `GenerationManager` 分发到标准化浏览器 Store。
 
-REST remains the client-to-server command path. Changing the active conversation changes only the rendered projection and never cancels a generation.
+REST 保持为客户端到服务端的命令通道。切换活动对话只改变渲染投影，绝不取消生成任务。
 
-## Consequences
+## 影响
 
-- Background conversations update data without mounting Markdown DOM.
-- Tabs receive independent copies of the same user stream; Redis consumer groups are not used for browser delivery.
-- Event connection state and generation state remain separate state machines.
+- 后台对话可以更新数据，而无需挂载 Markdown DOM。
+- 各标签页接收同一用户流的独立副本；浏览器投递不使用 Redis 消费者组。
+- 事件连接状态与生成任务状态保持为两个独立状态机。

@@ -1,20 +1,20 @@
-# ADR-0004: Bounded exact replay with snapshot fallback
+# ADR-0004：有限精确重放与快照回退
 
-- Status: Accepted
-- Date: 2026-08-04
+- 状态：已接受
+- 日期：2026-08-04
 
-## Context
+## 背景
 
-Refreshes, network interruptions, and event gaps must not duplicate or corrupt generated text. Keeping every token event forever is unnecessarily expensive.
+页面刷新、网络中断和事件缺口不能导致生成文本重复或损坏。永久保存所有 Token 事件成本过高。
 
-## Decision
+## 决策
 
-Every generation event receives a monotonic sequence. Redis keeps a user stream for live multiplexing and a generation stream for direct `after_sequence` recovery. Active and recent events are replayable for a configurable window, initially 24 hours.
+每个生成事件都带单调递增序号。Redis 保存用于实时多路复用的用户事件流，以及用于直接按 `after_sequence` 恢复的生成任务事件流。活动和近期事件在可配置窗口内可重放，初始窗口为 24 小时。
 
-When an event cursor is outside the replay window, the server returns a complete content snapshot with replace semantics. PostgreSQL stores periodic checkpoints and every final state.
+当事件游标早于重放窗口时，服务端返回带替换语义的完整内容快照。PostgreSQL 保存定期检查点和所有最终状态。
 
-## Consequences
+## 影响
 
-- Clients apply events idempotently and stop on a sequence gap.
-- Exact delta replay is bounded; correct current content is durable beyond that window.
-- A lost upstream provider stream cannot resume at a provider token. After the first delta, failure preserves partial content and requires explicit user retry.
+- 客户端以幂等方式应用事件，遇到序号缺口时停止。
+- 精确增量重放有时间边界，窗口之外仍持久保证当前完整内容正确。
+- 丢失的上游供应商流无法从供应商 Token 位置继续。收到首个增量后若失败，系统保留部分内容，并要求用户显式重试。

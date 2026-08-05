@@ -1,3 +1,3 @@
 # @chat/test-utils
 
-Shared fixtures, test container helpers, and the scriptable fake LLM provider will be added as their owning phases begin.
+共享固定样本、测试容器辅助工具和可编排假 LLM 供应商将在对应阶段开始时加入。

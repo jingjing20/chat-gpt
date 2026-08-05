@@ -1,22 +1,22 @@
-# Repository guidance
+# 仓库协作规范
 
-## Scope
+## 范围
 
-This repository implements the phased plan in `docs/project-development-plan.md`. Work on one phase at a time and do not pull later-phase product features into the current phase without an ADR and explicit approval.
+本仓库实现 `docs/project-development-plan.md` 中的分阶段计划。一次只开发一个阶段；未经 ADR 和明确批准，不得提前引入后续阶段功能。
 
-## Architecture boundaries
+## 架构边界
 
-- `apps/web` owns routing, rendering, browser state, and HTTP/SSE clients. It must never receive provider secrets.
-- `apps/api` owns authentication, authorization, REST, sync, and the user event gateway. Long LLM requests do not run in request handlers.
-- `apps/worker` is the only application allowed to start generation requests.
-- `packages/contracts` contains transport schemas and shared DTOs. Do not import ORM types into it.
-- `packages/config` validates process configuration. New environment variables require schema validation and `.env.example` documentation.
-- Database changes belong in `packages/database` and require migrations.
-- Provider-specific behavior belongs in `packages/llm`, behind a normalized adapter.
+- `apps/web` 负责路由、渲染、浏览器状态以及 HTTP/SSE 客户端，绝不能接收供应商密钥。
+- `apps/api` 负责认证、授权、REST、同步和用户事件网关，不能在请求处理器中运行耗时 LLM 请求。
+- `apps/worker` 是唯一允许发起生成请求的应用。
+- `packages/contracts` 存放传输 Schema 和共享 DTO，禁止导入 ORM 类型。
+- `packages/config` 负责进程配置校验；新增环境变量必须更新校验 Schema 和 `.env.example`。
+- 数据库变更属于 `packages/database`，且必须包含迁移。
+- 供应商专属行为属于 `packages/llm`，并隐藏在标准化适配器之后。
 
-## Commands
+## 命令
 
-Run commands from the repository root with pnpm:
+从仓库根目录使用 pnpm：
 
 ```bash
 pnpm format:check
@@ -27,26 +27,27 @@ pnpm build
 pnpm test:e2e
 ```
 
-Use `pnpm infra:up` and `pnpm infra:down` for local PostgreSQL and Redis.
+本地 PostgreSQL 和 Redis 使用 `pnpm infra:up` 与 `pnpm infra:down` 管理。
 
-## Verification
+## 验证要求
 
-- Add or update tests for every behavior change, including failure and authorization paths.
-- Run the narrowest relevant test while iterating, then all root verification commands before phase handoff.
-- Never make live DeepSeek or OpenAI calls in automated tests. Use the fake provider.
-- Do not mark a phase complete until every acceptance item in the project plan is demonstrated.
+- 每项行为变更都要新增或更新测试，包括失败路径和授权路径。
+- 迭代时先运行最小相关测试，阶段交付前运行根目录全量验证命令。
+- 自动化测试禁止真实调用 DeepSeek 或 OpenAI，必须使用假供应商。
+- 项目计划中的全部验收项均被验证前，不得宣布阶段完成。
 
-## Security and data handling
+## 安全和数据处理
 
-- Never commit `.env`, API keys, cookies, access tokens, refresh tokens, prompts, or generated user content.
-- Logs use identifiers, lengths, timings, statuses, and safe error codes; they do not include message content by default.
-- Every conversation, message, generation, event, and usage query must be scoped by the authenticated user.
-- Treat Markdown and model output as untrusted input.
+- 禁止提交 `.env`、API Key、Cookie、访问令牌、刷新令牌、提示词或用户生成内容。
+- 日志只记录标识符、长度、耗时、状态和安全错误码，默认不记录消息内容。
+- 对话、消息、生成任务、事件和用量查询都必须由已认证用户限定作用域。
+- Markdown 和模型输出均按不可信输入处理。
 
-## Code conventions
+## 代码约定
 
-- TypeScript strict mode stays enabled.
-- Prefer explicit domain types and Zod schemas at transport and configuration boundaries.
-- Keep state transitions and event reducers pure where possible.
-- Use idempotent writes and conditional state transitions for asynchronous workflows.
-- Use conventional commits when commits are requested; do not commit automatically.
+- 保持 TypeScript 严格模式。
+- 在传输和配置边界优先使用显式领域类型与 Zod Schema。
+- 状态转换和事件 Reducer 应尽可能保持纯函数。
+- 异步工作流使用幂等写入和条件状态转换。
+- 仅在用户要求提交时使用约定式提交，不自动创建提交。
+- 所有文档和代码注释使用简体中文。

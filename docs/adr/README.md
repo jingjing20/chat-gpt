@@ -1,5 +1,5 @@
-# Architecture decision records
+# 架构决策记录
 
-ADRs capture decisions that change system boundaries, reliability guarantees, or long-term implementation cost.
+ADR 用于记录会改变系统边界、可靠性保证或长期实施成本的决策。
 
-Each ADR is immutable after acceptance. If a decision changes, add a new ADR that supersedes the old record rather than rewriting history.
+ADR 接受后不可修改。若决策发生变化，应新增一份替代原记录的 ADR，而不是重写历史。

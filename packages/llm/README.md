@@ -1,3 +1,3 @@
 # @chat/llm
 
-The normalized LLM provider interface, fake provider, and DeepSeek adapter will be added in phase 3.
+标准化 LLM 供应商接口、假供应商和 DeepSeek 适配器将在阶段 3 加入。

@@ -25,9 +25,32 @@ export const apiEnvSchema = infrastructureSchema.extend({
   AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(1).default(60),
 });
 
-export const workerEnvSchema = infrastructureSchema.extend({
-  WORKER_HEALTH_PORT: z.coerce.number().int().min(1).max(65_535).default(3002),
-});
+export const workerEnvSchema = infrastructureSchema
+  .extend({
+    WORKER_HEALTH_PORT: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(65_535)
+      .default(3002),
+    LLM_PROVIDER: z.literal('deepseek').default('deepseek'),
+    LLM_BASE_URL: z.string().url().default('https://api.deepseek.com'),
+    LLM_API_KEY: z.string().default(''),
+    LLM_DEFAULT_MODEL: z.string().trim().min(1).default('deepseek-v4-flash'),
+    LLM_REASONING_MODE: z.enum(['enabled', 'disabled']).default('enabled'),
+    LLM_REASONING_EFFORT: z.enum(['low', 'medium', 'high']).default('high'),
+    LLM_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1).default(600_000),
+    LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1).default(8192),
+  })
+  .superRefine((environment, context) => {
+    if (environment.NODE_ENV === 'production' && !environment.LLM_API_KEY) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LLM_API_KEY'],
+        message: '生产环境必须配置 LLM_API_KEY',
+      });
+    }
+  });
 
 export const webEnvSchema = z.object({
   NODE_ENV: nodeEnvSchema.default('development'),

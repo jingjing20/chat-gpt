@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const webPort = process.env.E2E_WEB_PORT ?? '3000';
+const apiPort = process.env.E2E_API_PORT ?? '3001';
+const webBaseUrl = `http://127.0.0.1:${webPort}`;
+const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
+const webCommand = process.env.E2E_WEB_COMMAND ?? `pnpm dev --port ${webPort}`;
+
 export default defineConfig({
   testDir: './test',
   testMatch: '**/*.e2e-spec.ts',
@@ -7,7 +13,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'line',
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: webBaseUrl,
     trace: 'retain-on-failure',
     ...devices['Desktop Chrome'],
     channel: 'chrome',
@@ -15,7 +21,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'pnpm --dir ../api start',
-      url: 'http://127.0.0.1:3001/health/live',
+      url: `${apiBaseUrl}/health/live`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
@@ -29,16 +35,16 @@ export default defineConfig({
           'test-only-access-token-secret-at-least-32-chars',
         AUTH_COOKIE_SECURE: 'false',
         AUTH_RATE_LIMIT_MAX: '100',
-        API_PORT: '3001',
+        API_PORT: apiPort,
       },
     },
     {
-      command: 'pnpm dev',
-      url: 'http://127.0.0.1:3000/login',
+      command: webCommand,
+      url: `${webBaseUrl}/login`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
-        API_INTERNAL_URL: 'http://127.0.0.1:3001',
+        API_INTERNAL_URL: apiBaseUrl,
       },
     },
   ],

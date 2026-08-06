@@ -62,7 +62,7 @@ curl http://localhost:3002/health/live
 curl http://localhost:3002/health/ready
 ```
 
-API 的 `ready` 会验证配置和 PostgreSQL 连接；Worker 当前验证自身配置。
+API 的 `ready` 会验证配置和 PostgreSQL 连接；Worker 验证自身配置。阶段 3 可按 `apps/worker/README.md` 使用仅开发环境开放的入口显式执行真实供应商冒烟测试，默认自动化测试只使用固定流和 Fake Provider。
 
 ## 停止
 

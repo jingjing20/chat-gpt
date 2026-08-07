@@ -5,12 +5,14 @@ import {
   createMessageResponseSchema,
   createGenerationResponseSchema,
   generationEventHistorySchema,
+  generationResponseSchema,
   generationSyncResponseSchema,
   messagePageResponseSchema,
   userResponseSchema,
   type ConversationResponse,
 } from '@chat/contracts';
 import { apiRequest, obtainCsrf } from './api';
+import { useGenerationStore } from './generation-store';
 
 export async function login(email: string, password: string) {
   await obtainCsrf();
@@ -145,6 +147,19 @@ export async function getGenerationEvents(
     await apiRequest(
       `/generations/${generationId}/events?after_sequence=${afterSequence}`,
     ),
+  );
+}
+
+export async function cancelGeneration(
+  conversationId: string,
+  generationId: string,
+) {
+  const local = useGenerationStore.getState().generations[generationId];
+  if (!local || local.conversationId !== conversationId) {
+    throw new Error('停止目标与当前对话不匹配');
+  }
+  return generationResponseSchema.parse(
+    await apiRequest(`/generations/${generationId}/cancel`, { method: 'POST' }),
   );
 }
 

@@ -96,6 +96,7 @@ model ConversationUserState {
   archivedAt     DateTime?    @map("archived_at") @db.Timestamptz(3)
   lastReadAt     DateTime?    @map("last_read_at") @db.Timestamptz(3)
   scrollOffset   Int          @default(0) @map("scroll_offset")
+  hasUnread      Boolean      @default(false) @map("has_unread")
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

@@ -88,6 +88,8 @@ export class GenerationProcessor {
     if (initialAttemptCount >= this.environment.GENERATION_MAX_ATTEMPTS) {
       await this.finalizeFailed({
         generationId,
+        userId: generation.userId,
+        conversationId: generation.conversationId,
         responseMessageId: generation.responseMessageId,
         content,
         reasoningContent,
@@ -265,6 +267,8 @@ export class GenerationProcessor {
         }
         await this.finalizeCompleted({
           generationId,
+          userId: generation.userId,
+          conversationId: generation.conversationId,
           responseMessageId: generation.responseMessageId,
           content,
           reasoningContent,
@@ -321,6 +325,8 @@ export class GenerationProcessor {
         }
         await this.finalizeFailed({
           generationId,
+          userId: generation.userId,
+          conversationId: generation.conversationId,
           responseMessageId: generation.responseMessageId,
           content,
           reasoningContent,
@@ -485,6 +491,15 @@ export class GenerationProcessor {
           completedAt: now,
         },
       });
+      await transaction.conversationUserState.update({
+        where: {
+          conversationId_userId: {
+            conversationId: input.conversationId,
+            userId: input.userId,
+          },
+        },
+        data: { hasUnread: true },
+      });
       if (input.usage) await this.createUsage(transaction, input, input.usage);
     });
     if (await this.isCancellationRequested(input.generationId)) {
@@ -525,6 +540,15 @@ export class GenerationProcessor {
           reasoningContent: this.savedReasoning(input.reasoningContent),
           completedAt: now,
         },
+      });
+      await transaction.conversationUserState.update({
+        where: {
+          conversationId_userId: {
+            conversationId: input.conversationId,
+            userId: input.userId,
+          },
+        },
+        data: { hasUnread: true },
       });
       if (input.usage) await this.createUsage(transaction, input, input.usage);
     });
@@ -585,6 +609,15 @@ export class GenerationProcessor {
           reasoningContent: this.savedReasoning(reasoningContent),
           completedAt: now,
         },
+      });
+      await transaction.conversationUserState.update({
+        where: {
+          conversationId_userId: {
+            conversationId: generation.conversationId,
+            userId: generation.userId,
+          },
+        },
+        data: { hasUnread: true },
       });
       return true;
     });
@@ -676,6 +709,8 @@ export class GenerationProcessor {
 
 interface FinalizeInput {
   generationId: string;
+  userId: string;
+  conversationId: string;
   responseMessageId: string;
   content: string;
   reasoningContent: string;
@@ -689,6 +724,8 @@ interface FinalizeInput {
 
 interface FailureInput {
   generationId: string;
+  userId: string;
+  conversationId: string;
   responseMessageId: string;
   content: string;
   reasoningContent: string;

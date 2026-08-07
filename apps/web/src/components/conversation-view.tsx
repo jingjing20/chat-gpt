@@ -2,6 +2,7 @@
 
 import {
   archiveConversation,
+  cancelGeneration,
   createGeneration,
   getConversation,
   listMessages,
@@ -9,6 +10,7 @@ import {
   renameConversation,
   saveScrollPosition,
 } from '@/lib/chat-api';
+import { ApiClientError } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 import {
   useInfiniteQuery,
@@ -17,9 +19,14 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, type FormEvent } from 'react';
 import { SafeMarkdown } from './safe-markdown';
-import { useGenerationStore } from '@/lib/generation-store';
+import {
+  isGenerationActive,
+  selectConversationGenerations,
+  useGenerationStore,
+} from '@/lib/generation-store';
+import { useShallow } from 'zustand/react/shallow';
 
 export function ConversationView({
   conversationId,
@@ -31,15 +38,19 @@ export function ConversationView({
   const viewportRef = useRef<HTMLDivElement>(null);
   const restoredConversationRef = useRef<string | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [content, setContent] = useState('');
-  const generations = useGenerationStore((state) => state.generations);
-  const overlays = useMemo(
-    () =>
-      Object.values(generations).filter(
-        (generation) => generation.conversationId === conversationId,
-      ),
-    [conversationId, generations],
+  const content = useGenerationStore(
+    (state) => state.drafts[conversationId] ?? '',
   );
+  const overlays = useGenerationStore(
+    useShallow(selectConversationGenerations(conversationId)),
+  );
+  const activeOverlays = overlays.filter((generation) =>
+    isGenerationActive(generation.status),
+  );
+  const terminalSignature = overlays
+    .filter((generation) => !isGenerationActive(generation.status))
+    .map((generation) => `${generation.generationId}:${generation.status}`)
+    .join('|');
   const detailQuery = useQuery({
     queryKey: queryKeys.conversations.detail(conversationId),
     queryFn: () => getConversation(conversationId),
@@ -65,14 +76,26 @@ export function ConversationView({
               content: overlay.content,
               reasoningContent: overlay.reasoningContent || null,
               status: overlay.status,
+              generationId: overlay.generationId,
             }
           : message;
       });
   }, [messagesQuery.data, overlays]);
   const sendMutation = useMutation({
     mutationFn: (message: string) => createGeneration(conversationId, message),
+    onMutate: (message) => {
+      useGenerationStore.getState().clearDraft(conversationId);
+      return { message };
+    },
+    onError: (_error, _message, context) => {
+      if (
+        context?.message &&
+        !useGenerationStore.getState().drafts[conversationId]
+      ) {
+        useGenerationStore.getState().setDraft(conversationId, context.message);
+      }
+    },
     onSuccess: async (result) => {
-      setContent('');
       useGenerationStore.getState().register({
         generationId: result.generation.id,
         conversationId: result.generation.conversationId,
@@ -98,6 +121,21 @@ export function ConversationView({
         const viewport = viewportRef.current;
         if (viewport) viewport.scrollTop = viewport.scrollHeight;
       });
+    },
+  });
+  const cancelMutation = useMutation({
+    mutationFn: (generationId: string) =>
+      cancelGeneration(conversationId, generationId),
+    onSuccess: (generation) => {
+      const local = useGenerationStore.getState().generations[generation.id];
+      if (local?.conversationId === conversationId) {
+        useGenerationStore.setState((store) => ({
+          generations: {
+            ...store.generations,
+            [generation.id]: { ...local, status: generation.status },
+          },
+        }));
+      }
     },
   });
   const archiveMutation = useMutation({
@@ -128,8 +166,11 @@ export function ConversationView({
         queryKeys.conversations.detail(conversationId),
         conversation,
       );
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.all,
+      });
     });
-  }, [conversationId, queryClient]);
+  }, [conversationId, queryClient, terminalSignature]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -145,12 +186,18 @@ export function ConversationView({
     viewport.scrollTop = detailQuery.data.scrollOffset;
   }, [conversationId, detailQuery.data, messagesQuery.isPending]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    return () => {
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-    },
-    [],
-  );
+      if (viewport) {
+        void saveScrollPosition(
+          conversationId,
+          Math.max(0, Math.round(viewport.scrollTop)),
+        );
+      }
+    };
+  }, [conversationId]);
 
   function handleScroll() {
     if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
@@ -243,10 +290,33 @@ export function ConversationView({
                   </details>
                 ) : null}
                 <SafeMarkdown content={message.content} />
-                {message.status === 'PENDING' ||
+                {message.status === 'QUEUED' ||
+                message.status === 'PENDING' ||
                 message.status === 'STARTING' ||
                 message.status === 'STREAMING' ? (
-                  <span className="streaming-indicator">生成中…</span>
+                  <span className="streaming-indicator">
+                    {message.status === 'PENDING' || message.status === 'QUEUED'
+                      ? '排队中…'
+                      : '生成中…'}
+                  </span>
+                ) : null}
+                {'generationId' in message &&
+                typeof message.generationId === 'string' &&
+                (message.status === 'QUEUED' ||
+                  message.status === 'STARTING' ||
+                  message.status === 'STREAMING' ||
+                  message.status === 'CANCEL_REQUESTED') ? (
+                  <button
+                    className="stop-generation"
+                    disabled={
+                      cancelMutation.isPending &&
+                      cancelMutation.variables === message.generationId
+                    }
+                    onClick={() => cancelMutation.mutate(message.generationId)}
+                    type="button"
+                  >
+                    停止这项生成
+                  </button>
                 ) : null}
               </article>
             ))}
@@ -254,10 +324,24 @@ export function ConversationView({
         )}
       </div>
       <form className="composer" onSubmit={submit}>
+        <div className="composer-status" aria-live="polite">
+          {activeOverlays.some((generation) => generation.status === 'QUEUED')
+            ? '任务已进入队列，切换对话不会中断。'
+            : activeOverlays.length > 0
+              ? `此对话有 ${activeOverlays.length} 项任务正在运行。`
+              : sendMutation.error instanceof ApiClientError &&
+                  sendMutation.error.code === 'USER_CONCURRENCY_LIMIT'
+                ? sendMutation.error.message
+                : null}
+        </div>
         <textarea
           aria-label="消息内容"
           maxLength={20_000}
-          onChange={(event) => setContent(event.target.value)}
+          onChange={(event) =>
+            useGenerationStore
+              .getState()
+              .setDraft(conversationId, event.target.value)
+          }
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();

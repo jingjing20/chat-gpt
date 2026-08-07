@@ -20,6 +20,7 @@ describe('SecurityService', () => {
     GENERATION_QUEUE_PREFIX: 'chat:test:queue',
     EVENT_KEY_PREFIX: 'chat:test:evt',
     EVENT_HEARTBEAT_MS: 20_000,
+    USER_GENERATION_CONCURRENCY_LIMIT: 2,
   };
   const service = new SecurityService(new JwtService(), environment);
 

@@ -168,6 +168,10 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
         where: { responseGeneration: { id: generationId } },
       });
       expect(message.content).toBe('后台完成');
+      const userState = await prisma.conversationUserState.findFirstOrThrow({
+        where: { conversationId: message.conversationId },
+      });
+      expect(userState.hasUnread).toBe(true);
     } finally {
       await worker.onApplicationShutdown();
     }

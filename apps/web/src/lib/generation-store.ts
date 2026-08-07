@@ -15,6 +15,17 @@ export interface ActiveGenerationState {
 
 export type ApplyResult = 'applied' | 'duplicate' | 'gap';
 
+export const ACTIVE_GENERATION_STATUSES: readonly GenerationStatus[] = [
+  'QUEUED',
+  'STARTING',
+  'STREAMING',
+  'CANCEL_REQUESTED',
+];
+
+export function isGenerationActive(status: GenerationStatus): boolean {
+  return ACTIVE_GENERATION_STATUSES.includes(status);
+}
+
 export function reduceGenerationEvent(
   current: ActiveGenerationState | undefined,
   event: UserEvent,
@@ -64,6 +75,7 @@ export function reduceGenerationEvent(
 
 interface GenerationStore {
   generations: Record<string, ActiveGenerationState>;
+  drafts: Record<string, string>;
   register: (state: ActiveGenerationState) => void;
   apply: (event: UserEvent) => ApplyResult;
   replaceSnapshot: (
@@ -73,11 +85,35 @@ interface GenerationStore {
       'content' | 'reasoningContent' | 'lastAppliedSequence' | 'status'
     >,
   ) => void;
+  setDraft: (conversationId: string, content: string) => void;
+  clearDraft: (conversationId: string) => void;
   clear: () => void;
+}
+
+export function selectConversationGenerations(conversationId: string) {
+  return (store: GenerationStore) =>
+    Object.values(store.generations).filter(
+      (generation) => generation.conversationId === conversationId,
+    );
+}
+
+export function selectConversationActivity(conversationId: string) {
+  return (store: GenerationStore) => {
+    const generations = Object.values(store.generations).filter(
+      (generation) => generation.conversationId === conversationId,
+    );
+    return {
+      activeCount: generations.filter((generation) =>
+        isGenerationActive(generation.status),
+      ).length,
+      latestStatus: generations.at(-1)?.status,
+    };
+  };
 }
 
 export const useGenerationStore = create<GenerationStore>((set, get) => ({
   generations: {},
+  drafts: {},
   register: (state) =>
     set((store) =>
       store.generations[state.generationId]
@@ -117,5 +153,15 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
         },
       };
     }),
-  clear: () => set({ generations: {} }),
+  setDraft: (conversationId, content) =>
+    set((store) => ({
+      drafts: { ...store.drafts, [conversationId]: content },
+    })),
+  clearDraft: (conversationId) =>
+    set((store) => {
+      const drafts = { ...store.drafts };
+      delete drafts[conversationId];
+      return { drafts };
+    }),
+  clear: () => set({ generations: {}, drafts: {} }),
 }));

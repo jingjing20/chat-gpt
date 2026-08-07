@@ -199,6 +199,44 @@ describe('API 阶段 4 Generation（端到端）', () => {
     }
   });
 
+  it('按用户限制并发 generation，终态后释放额度', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const csrfToken = await register(agent, 'concurrency@example.com');
+    const conversationA = await createConversation(agent, csrfToken);
+    const conversationB = await createConversation(agent, csrfToken);
+
+    const create = (conversationId: string, content: string) =>
+      agent
+        .post(`/api/v1/conversations/${conversationId}/generations`)
+        .set('x-csrf-token', csrfToken)
+        .set('Idempotency-Key', randomUUID())
+        .send({
+          content,
+          model: 'fake-model',
+          clientMessageId: randomUUID(),
+        });
+
+    const first = await create(conversationA, '任务 A').expect(202);
+    await create(conversationB, '任务 B').expect(202);
+    await create(conversationA, '超出并发')
+      .expect(429)
+      .expect(({ body }: { body: Record<string, unknown> }) => {
+        expect(body).toMatchObject({
+          code: 'USER_CONCURRENCY_LIMIT',
+          message: '同时最多运行 2 个生成任务',
+        });
+      });
+
+    const firstId = createGenerationResponseSchema.parse(first.body).generation
+      .id;
+    await prisma.generation.update({
+      where: { id: firstId },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+    await create(conversationA, '释放额度后创建').expect(202);
+    expect(await prisma.generation.count()).toBe(3);
+  });
+
   afterAll(async () => {
     await app.close();
   });

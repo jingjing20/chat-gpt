@@ -311,6 +311,36 @@ button:disabled {
   text-decoration: none;
 }
 
+.conversation-link-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.generation-dot,
+.unread-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.generation-dot {
+  animation: generation-pulse 1.4s ease-in-out infinite;
+}
+
+.unread-dot {
+  background: #78a5ff;
+}
+
+@keyframes generation-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 .conversation-link:hover,
 .conversation-link.active {
   background: var(--surface-raised);
@@ -558,6 +588,25 @@ button:disabled {
   width: min(800px, calc(100% - 48px));
   margin: 0 auto;
   padding: 16px 0 24px;
+}
+
+.composer-status {
+  min-height: 18px;
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.stop-generation {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border: 1px solid #51302f;
+  border-radius: 8px;
+  background: transparent;
+  color: #e9a09a;
+  font-size: 11px;
 }
 
 .composer textarea {

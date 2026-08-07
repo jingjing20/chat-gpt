@@ -34,6 +34,7 @@ export const apiEnvSchema = infrastructureSchema.extend({
   GENERATION_QUEUE_PREFIX: z.string().trim().min(1).default('chat:dev:queue'),
   EVENT_KEY_PREFIX: z.string().trim().min(1).default('chat:dev:evt'),
   EVENT_HEARTBEAT_MS: z.coerce.number().int().min(1_000).default(20_000),
+  USER_GENERATION_CONCURRENCY_LIMIT: z.coerce.number().int().min(1).default(2),
 });
 
 export const workerEnvSchema = infrastructureSchema

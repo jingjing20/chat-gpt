@@ -11,8 +11,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
-import { GenerationManager } from './generation-manager';
 import { useGenerationStore } from '@/lib/generation-store';
+import { ConversationNavLink } from './conversation-nav-link';
 
 export function ChatShell({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -57,7 +57,6 @@ export function ChatShell({ children }: { children: ReactNode }) {
 
   return (
     <main className="chat-shell">
-      <GenerationManager userId={userQuery.data.id} />
       <aside className="sidebar">
         <div className="sidebar-heading">
           <Link href="/chat" className="brand-link">
@@ -77,23 +76,11 @@ export function ChatShell({ children }: { children: ReactNode }) {
         <nav className="conversation-nav" aria-label="对话列表">
           <p className="nav-label">最近对话</p>
           {conversationsQuery.data?.items.map((conversation) => (
-            <Link
-              className={
-                params.conversationId === conversation.id
-                  ? 'conversation-link active'
-                  : 'conversation-link'
-              }
-              href={`/chat/${conversation.id}`}
+            <ConversationNavLink
+              conversation={conversation}
+              isActive={params.conversationId === conversation.id}
               key={conversation.id}
-            >
-              <span>{conversation.title}</span>
-              <time dateTime={conversation.updatedAt}>
-                {new Intl.DateTimeFormat('zh-CN', {
-                  month: 'numeric',
-                  day: 'numeric',
-                }).format(new Date(conversation.updatedAt))}
-              </time>
-            </Link>
+            />
           ))}
           {conversationsQuery.isSuccess &&
           conversationsQuery.data.items.length === 0 ? (
@@ -117,7 +104,9 @@ export function ChatShell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </aside>
-      <section className="chat-stage">{children}</section>
+      <section className="chat-stage" key={params.conversationId ?? 'empty'}>
+        {children}
+      </section>
     </main>
   );
 }

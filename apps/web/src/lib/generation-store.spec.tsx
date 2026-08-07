@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { UserEvent } from '@chat/contracts';
-import { reduceGenerationEvent } from './generation-store';
+import {
+  isGenerationActive,
+  reduceGenerationEvent,
+  selectConversationActivity,
+} from './generation-store';
 
 function event(sequence: number, delta = '甲'): UserEvent {
   return {
@@ -31,4 +35,21 @@ test('发现顺序缺口后暂停追加', () => {
   assert.equal(result.result, 'gap');
   assert.equal(result.state.content, '');
   assert.equal(result.state.syncState, 'resyncing');
+});
+
+test('对话活动 selector 只汇总目标对话的活动任务', () => {
+  const active = reduceGenerationEvent(undefined, event(1)).state;
+  const other = {
+    ...active,
+    generationId: '55555555-5555-4555-8555-555555555555',
+    conversationId: '66666666-6666-4666-8666-666666666666',
+    status: 'COMPLETED' as const,
+  };
+  const result = selectConversationActivity(active.conversationId)({
+    generations: { [active.generationId]: active, [other.generationId]: other },
+    drafts: {},
+  } as Parameters<ReturnType<typeof selectConversationActivity>>[0]);
+  assert.equal(result.activeCount, 1);
+  assert.equal(isGenerationActive('CANCEL_REQUESTED'), true);
+  assert.equal(isGenerationActive('COMPLETED'), false);
 });

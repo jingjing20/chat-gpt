@@ -93,6 +93,7 @@ export const conversationResponseSchema = z.object({
   archivedAt: z.string().datetime().nullable(),
   lastReadAt: z.string().datetime().nullable(),
   scrollOffset: z.number().int().nonnegative(),
+  hasUnread: z.boolean(),
   lastMessageAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

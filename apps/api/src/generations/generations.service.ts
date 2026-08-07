@@ -23,6 +23,11 @@ const CREATABLE_STATUSES = [
   GenerationStatus.STREAMING,
 ] as const;
 
+const ACTIVE_STATUSES = [
+  ...CREATABLE_STATUSES,
+  GenerationStatus.CANCEL_REQUESTED,
+] as const;
+
 @Injectable()
 export class GenerationsService {
   constructor(
@@ -40,14 +45,26 @@ export class GenerationsService {
     const existing = await this.findByIdempotencyKey(userId, idempotencyKey);
     if (existing) return this.resolveExisting(existing, requestHash);
 
-    const conversation = await this.prisma.conversation.findFirst({
-      where: { id: conversationId, ownerUserId: userId },
-      select: { id: true },
-    });
-    if (!conversation) this.notFound('对话不存在');
-
     try {
       return await this.prisma.$transaction(async (transaction) => {
+        await transaction.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtext(${userId})) IS NULL AS locked
+        `;
+        const conversation = await transaction.conversation.findFirst({
+          where: { id: conversationId, ownerUserId: userId },
+          select: { id: true },
+        });
+        if (!conversation) this.notFound('对话不存在');
+        const activeCount = await transaction.generation.count({
+          where: { userId, status: { in: [...ACTIVE_STATUSES] } },
+        });
+        if (activeCount >= this.environment.USER_GENERATION_CONCURRENCY_LIMIT) {
+          throw new ApiException(
+            'USER_CONCURRENCY_LIMIT',
+            `同时最多运行 ${this.environment.USER_GENERATION_CONCURRENCY_LIMIT} 个生成任务`,
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
         const now = new Date();
         const userMessage = await transaction.message.create({
           data: {

@@ -99,7 +99,7 @@ export class ConversationsService {
     await this.requireScoped(userId, conversationId);
     await this.prisma.conversationUserState.update({
       where: { conversationId_userId: { conversationId, userId } },
-      data: { lastReadAt: new Date() },
+      data: { lastReadAt: new Date(), hasUnread: false },
     });
     return this.get(userId, conversationId);
   }
@@ -234,6 +234,7 @@ export class ConversationsService {
       archivedAt: Date | null;
       lastReadAt: Date | null;
       scrollOffset: number;
+      hasUnread: boolean;
     },
   ): ConversationResponse {
     return {
@@ -242,6 +243,7 @@ export class ConversationsService {
       archivedAt: state.archivedAt?.toISOString() ?? null,
       lastReadAt: state.lastReadAt?.toISOString() ?? null,
       scrollOffset: state.scrollOffset,
+      hasUnread: state.hasUnread,
       lastMessageAt: conversation.lastMessageAt?.toISOString() ?? null,
       createdAt: conversation.createdAt.toISOString(),
       updatedAt: conversation.updatedAt.toISOString(),

@@ -39,7 +39,7 @@ class BrowserE2eProvider implements LlmProviderAdapter {
       { type: 'content_delta', delta: '这是实时' } as const,
       { type: 'content_delta', delta: '流式回复。' } as const,
     ]) {
-      await new Promise((resolve) => setTimeout(resolve, 40));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       if (signal?.aborted) throw signal.reason;
       yield event;
     }

@@ -2,7 +2,7 @@
 
 import {
   archiveConversation,
-  createMessage,
+  createGeneration,
   getConversation,
   listMessages,
   markConversationRead,
@@ -19,6 +19,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { SafeMarkdown } from './safe-markdown';
+import { useGenerationStore } from '@/lib/generation-store';
 
 export function ConversationView({
   conversationId,
@@ -31,6 +32,14 @@ export function ConversationView({
   const restoredConversationRef = useRef<string | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [content, setContent] = useState('');
+  const generations = useGenerationStore((state) => state.generations);
+  const overlays = useMemo(
+    () =>
+      Object.values(generations).filter(
+        (generation) => generation.conversationId === conversationId,
+      ),
+    [conversationId, generations],
+  );
   const detailQuery = useQuery({
     queryKey: queryKeys.conversations.detail(conversationId),
     queryFn: () => getConversation(conversationId),
@@ -41,17 +50,39 @@ export function ConversationView({
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
-  const messages = useMemo(
-    () =>
-      (messagesQuery.data?.pages.flatMap((page) => page.items) ?? [])
-        .slice()
-        .reverse(),
-    [messagesQuery.data],
-  );
+  const messages = useMemo(() => {
+    const overlayByMessage = new Map(
+      overlays.map((overlay) => [overlay.messageId, overlay]),
+    );
+    return (messagesQuery.data?.pages.flatMap((page) => page.items) ?? [])
+      .slice()
+      .reverse()
+      .map((message) => {
+        const overlay = overlayByMessage.get(message.id);
+        return overlay
+          ? {
+              ...message,
+              content: overlay.content,
+              reasoningContent: overlay.reasoningContent || null,
+              status: overlay.status,
+            }
+          : message;
+      });
+  }, [messagesQuery.data, overlays]);
   const sendMutation = useMutation({
-    mutationFn: (message: string) => createMessage(conversationId, message),
-    onSuccess: async () => {
+    mutationFn: (message: string) => createGeneration(conversationId, message),
+    onSuccess: async (result) => {
       setContent('');
+      useGenerationStore.getState().register({
+        generationId: result.generation.id,
+        conversationId: result.generation.conversationId,
+        messageId: result.generation.responseMessageId,
+        status: result.generation.status,
+        content: '',
+        reasoningContent: '',
+        lastAppliedSequence: result.generation.lastSequence,
+        syncState: 'synced',
+      });
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: queryKeys.conversations.messages(conversationId),
@@ -193,7 +224,7 @@ export function ConversationView({
         {messages.length === 0 ? (
           <div className="message-empty">
             <h2>这是一段空白对话</h2>
-            <p>输入内容后，会收到一条静态 assistant 回复。</p>
+            <p>输入内容后，回答会实时显示在这里。</p>
           </div>
         ) : (
           <div className="message-list">
@@ -205,7 +236,18 @@ export function ConversationView({
                 <div className="message-role">
                   {message.role === 'USER' ? '你' : 'Assistant'}
                 </div>
+                {message.reasoningContent ? (
+                  <details className="reasoning-block">
+                    <summary>推理过程</summary>
+                    <SafeMarkdown content={message.reasoningContent} />
+                  </details>
+                ) : null}
                 <SafeMarkdown content={message.content} />
+                {message.status === 'PENDING' ||
+                message.status === 'STARTING' ||
+                message.status === 'STREAMING' ? (
+                  <span className="streaming-indicator">生成中…</span>
+                ) : null}
               </article>
             ))}
           </div>

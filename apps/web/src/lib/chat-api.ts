@@ -3,6 +3,9 @@ import {
   conversationListResponseSchema,
   conversationResponseSchema,
   createMessageResponseSchema,
+  createGenerationResponseSchema,
+  generationEventHistorySchema,
+  generationSyncResponseSchema,
   messagePageResponseSchema,
   userResponseSchema,
   type ConversationResponse,
@@ -115,6 +118,38 @@ export async function createMessage(conversationId: string, content: string) {
       body: JSON.stringify({ content }),
     }),
   );
+}
+
+export async function createGeneration(
+  conversationId: string,
+  content: string,
+) {
+  return createGenerationResponseSchema.parse(
+    await apiRequest(`/conversations/${conversationId}/generations`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
+      body: JSON.stringify({
+        content,
+        model: 'deepseek-v4-flash',
+        clientMessageId: crypto.randomUUID(),
+      }),
+    }),
+  );
+}
+
+export async function getGenerationEvents(
+  generationId: string,
+  afterSequence: number,
+) {
+  return generationEventHistorySchema.parse(
+    await apiRequest(
+      `/generations/${generationId}/events?after_sequence=${afterSequence}`,
+    ),
+  );
+}
+
+export async function syncGenerations() {
+  return generationSyncResponseSchema.parse(await apiRequest('/sync'));
 }
 
 export function conversationTimestamp(conversation: ConversationResponse) {

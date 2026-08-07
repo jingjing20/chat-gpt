@@ -13,6 +13,25 @@
   --danger: #ff958c;
 }
 
+.reasoning-block {
+  margin-bottom: 0.75rem;
+  color: var(--muted, #667085);
+  border-left: 2px solid #d0d5dd;
+  padding-left: 0.75rem;
+}
+
+.reasoning-block summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.streaming-indicator {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: #667085;
+  font-size: 0.78rem;
+}
+
 * {
   box-sizing: border-box;
 }

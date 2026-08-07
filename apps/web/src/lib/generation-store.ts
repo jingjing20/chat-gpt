@@ -1,0 +1,121 @@
+import type { GenerationStatus, UserEvent } from '@chat/contracts';
+import { create } from 'zustand';
+
+export interface ActiveGenerationState {
+  generationId: string;
+  conversationId: string;
+  messageId: string;
+  status: GenerationStatus;
+  content: string;
+  reasoningContent: string;
+  lastAppliedSequence: number;
+  syncState: 'synced' | 'resyncing';
+  error?: string;
+}
+
+export type ApplyResult = 'applied' | 'duplicate' | 'gap';
+
+export function reduceGenerationEvent(
+  current: ActiveGenerationState | undefined,
+  event: UserEvent,
+): { state: ActiveGenerationState; result: ApplyResult } {
+  const base: ActiveGenerationState = current ?? {
+    generationId: event.generationId,
+    conversationId: event.conversationId,
+    messageId: event.messageId,
+    status: 'QUEUED',
+    content: '',
+    reasoningContent: '',
+    lastAppliedSequence: 0,
+    syncState: 'synced',
+  };
+  if (event.sequence <= base.lastAppliedSequence) {
+    return { state: base, result: 'duplicate' };
+  }
+  if (event.sequence > base.lastAppliedSequence + 1) {
+    return { state: { ...base, syncState: 'resyncing' }, result: 'gap' };
+  }
+  const next = { ...base, lastAppliedSequence: event.sequence };
+  if (event.type === 'generation.started') next.status = 'STARTING';
+  if (event.type === 'message.delta') {
+    next.status = 'STREAMING';
+    next.content += String(event.payload.delta ?? '');
+  }
+  if (event.type === 'message.reasoning_delta') {
+    next.status = 'STREAMING';
+    next.reasoningContent += String(event.payload.delta ?? '');
+  }
+  if (event.type === 'message.snapshot') {
+    next.content = String(event.payload.content ?? '');
+    next.reasoningContent = String(event.payload.reasoningContent ?? '');
+    next.lastAppliedSequence = Number(
+      event.payload.snapshotSequence ?? event.sequence,
+    );
+  }
+  if (event.type === 'generation.completed') next.status = 'COMPLETED';
+  if (event.type === 'generation.cancelled') next.status = 'CANCELLED';
+  if (event.type === 'generation.failed') {
+    next.status = 'FAILED';
+    next.error = String(event.payload.safeMessage ?? '生成失败');
+  }
+  next.syncState = 'synced';
+  return { state: next, result: 'applied' };
+}
+
+interface GenerationStore {
+  generations: Record<string, ActiveGenerationState>;
+  register: (state: ActiveGenerationState) => void;
+  apply: (event: UserEvent) => ApplyResult;
+  replaceSnapshot: (
+    generationId: string,
+    snapshot: Pick<
+      ActiveGenerationState,
+      'content' | 'reasoningContent' | 'lastAppliedSequence' | 'status'
+    >,
+  ) => void;
+  clear: () => void;
+}
+
+export const useGenerationStore = create<GenerationStore>((set, get) => ({
+  generations: {},
+  register: (state) =>
+    set((store) =>
+      store.generations[state.generationId]
+        ? store
+        : {
+            generations: {
+              ...store.generations,
+              [state.generationId]: state,
+            },
+          },
+    ),
+  apply: (event) => {
+    const reduced = reduceGenerationEvent(
+      get().generations[event.generationId],
+      event,
+    );
+    set((store) => ({
+      generations: {
+        ...store.generations,
+        [event.generationId]: reduced.state,
+      },
+    }));
+    return reduced.result;
+  },
+  replaceSnapshot: (generationId, snapshot) =>
+    set((store) => {
+      const current = store.generations[generationId];
+      if (!current) return store;
+      return {
+        generations: {
+          ...store.generations,
+          [generationId]: {
+            ...current,
+            ...snapshot,
+            syncState: 'synced',
+          },
+        },
+      };
+    }),
+  clear: () => set({ generations: {} }),
+}));

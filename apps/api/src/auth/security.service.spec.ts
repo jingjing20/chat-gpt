@@ -18,6 +18,8 @@ describe('SecurityService', () => {
     OUTBOX_DISPATCH_INTERVAL_MS: 500,
     OUTBOX_DISPATCH_BATCH_SIZE: 20,
     GENERATION_QUEUE_PREFIX: 'chat:test:queue',
+    EVENT_KEY_PREFIX: 'chat:test:evt',
+    EVENT_HEARTBEAT_MS: 20_000,
   };
   const service = new SecurityService(new JwtService(), environment);
 

@@ -11,6 +11,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
+import { GenerationManager } from './generation-manager';
+import { useGenerationStore } from '@/lib/generation-store';
 
 export function ChatShell({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -38,6 +40,7 @@ export function ChatShell({ children }: { children: ReactNode }) {
   const logoutMutation = useMutation({
     mutationFn: logout,
     onSuccess: () => {
+      useGenerationStore.getState().clear();
       queryClient.clear();
       router.replace('/login');
     },
@@ -54,6 +57,7 @@ export function ChatShell({ children }: { children: ReactNode }) {
 
   return (
     <main className="chat-shell">
+      <GenerationManager userId={userQuery.data.id} />
       <aside className="sidebar">
         <div className="sidebar-heading">
           <Link href="/chat" className="brand-link">

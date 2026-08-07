@@ -39,6 +39,21 @@ export default defineConfig({
       },
     },
     {
+      command: 'pnpm --dir ../worker start',
+      url: 'http://127.0.0.1:3002/health/live',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: {
+        NODE_ENV: 'test',
+        DATABASE_URL:
+          process.env.TEST_DATABASE_URL ??
+          'postgresql://chat:chat_local_password@localhost:15432/chat_test?schema=public',
+        REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:16379',
+        LLM_USER_HASH_SECRET: 'test-worker-user-hash-secret-at-least-32-chars',
+        WORKER_HEALTH_PORT: '3002',
+      },
+    },
+    {
       command: webCommand,
       url: `${webBaseUrl}/login`,
       reuseExistingServer: !process.env.CI,

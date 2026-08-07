@@ -17,6 +17,7 @@ import { createHmac } from 'node:crypto';
 import { WORKER_ENV } from '../config/worker-config';
 import { PrismaService } from '../database/prisma.service';
 import { LLM_PROVIDER_ADAPTER } from './generation.constants';
+import { EventPublisherService } from '../events/event-publisher.service';
 
 const TERMINAL_STATUSES = [
   GenerationStatus.COMPLETED,
@@ -26,11 +27,14 @@ const TERMINAL_STATUSES = [
 
 @Injectable()
 export class GenerationProcessor {
+  private readonly fallbackSequences = new Map<string, number>();
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(LLM_PROVIDER_ADAPTER)
     private readonly provider: LlmProviderAdapter,
     @Inject(WORKER_ENV) private readonly environment: WorkerEnv,
+    private readonly events?: EventPublisherService,
   ) {}
 
   async process(generationId: string): Promise<void> {
@@ -135,10 +139,52 @@ export class GenerationProcessor {
       const attempt = await this.prisma.generationAttempt.create({
         data: { generationId, attemptNo },
       });
+      sequence = await this.publishEvent(
+        generation,
+        'generation.started',
+        {
+          attempt: attemptNo,
+        },
+        content,
+        reasoningContent,
+        'STARTING',
+      );
       let receivedFirstDelta = false;
       let usage: NormalizedUsage | undefined;
       let finishReason: string | null = null;
       let providerRequestId: string | null = null;
+      let bufferedType: 'message.delta' | 'message.reasoning_delta' | null =
+        null;
+      let bufferedDelta = '';
+      let lastFlushAt = Date.now();
+      const flushDelta = async () => {
+        if (!bufferedType || !bufferedDelta) return;
+        sequence = await this.publishEvent(
+          generation,
+          bufferedType,
+          { delta: bufferedDelta },
+          content,
+          reasoningContent,
+          'STREAMING',
+        );
+        bufferedType = null;
+        bufferedDelta = '';
+        lastFlushAt = Date.now();
+      };
+      const bufferDelta = async (
+        type: 'message.delta' | 'message.reasoning_delta',
+        delta: string,
+      ) => {
+        if (bufferedType && bufferedType !== type) await flushDelta();
+        bufferedType = type;
+        bufferedDelta += delta;
+        if (
+          bufferedDelta.length >= this.environment.GENERATION_DELTA_MAX_CHARS ||
+          Date.now() - lastFlushAt >= this.environment.GENERATION_DELTA_FLUSH_MS
+        ) {
+          await flushDelta();
+        }
+      };
 
       try {
         for await (const event of this.provider.streamChat(
@@ -156,7 +202,6 @@ export class GenerationProcessor {
         )) {
           if (event.type === 'content_delta') {
             content += event.delta;
-            sequence += 1;
             if (!receivedFirstDelta) {
               receivedFirstDelta = true;
               await this.markStreaming(
@@ -164,9 +209,9 @@ export class GenerationProcessor {
                 generation.responseMessageId,
               );
             }
+            await bufferDelta('message.delta', event.delta);
           } else if (event.type === 'reasoning_delta') {
             reasoningContent += event.delta;
-            sequence += 1;
             if (!receivedFirstDelta) {
               receivedFirstDelta = true;
               await this.markStreaming(
@@ -174,6 +219,7 @@ export class GenerationProcessor {
                 generation.responseMessageId,
               );
             }
+            await bufferDelta('message.reasoning_delta', event.delta);
           } else if (event.type === 'usage') {
             usage = event.usage;
           } else {
@@ -181,6 +227,7 @@ export class GenerationProcessor {
             providerRequestId = event.providerRequestId ?? null;
           }
         }
+        await flushDelta();
 
         if (
           cancelObserved ||
@@ -206,6 +253,16 @@ export class GenerationProcessor {
           undefined,
           providerRequestId,
         );
+        if (usage) {
+          sequence = await this.publishEvent(
+            generation,
+            'generation.usage',
+            { ...usage },
+            content,
+            reasoningContent,
+            'STREAMING',
+          );
+        }
         await this.finalizeCompleted({
           generationId,
           responseMessageId: generation.responseMessageId,
@@ -218,8 +275,18 @@ export class GenerationProcessor {
           provider: generation.provider,
           model: generation.model,
         });
+        sequence = await this.publishEvent(
+          generation,
+          'generation.completed',
+          { finishReason, finalContentHash: this.contentHash(content) },
+          content,
+          reasoningContent,
+          'COMPLETED',
+        );
+        await this.updateLastSequence(generationId, sequence);
         return;
       } catch (error) {
+        await flushDelta();
         if (
           cancelObserved ||
           (await this.isCancellationRequested(generationId))
@@ -263,12 +330,71 @@ export class GenerationProcessor {
           provider: generation.provider,
           model: generation.model,
         });
+        sequence = await this.publishEvent(
+          generation,
+          'generation.failed',
+          {
+            code: normalized.code,
+            retryable: normalized.retryableBeforeFirstDelta,
+            safeMessage: normalized.message,
+          },
+          content,
+          reasoningContent,
+          'FAILED',
+        );
+        await this.updateLastSequence(generationId, sequence);
         return;
       } finally {
         clearInterval(cancelTimer);
         controller.abort();
       }
     }
+  }
+
+  private async publishEvent(
+    generation: {
+      userId: string;
+      conversationId: string;
+      id: string;
+      responseMessageId: string;
+    },
+    type: Parameters<EventPublisherService['publish']>[0]['type'],
+    payload: Record<string, unknown>,
+    content: string,
+    reasoningContent: string,
+    status: string,
+  ): Promise<number> {
+    if (!this.events) {
+      const next = (this.fallbackSequences.get(generation.id) ?? 0) + 1;
+      this.fallbackSequences.set(generation.id, next);
+      return next;
+    }
+    const event = await this.events.publish({
+      userId: generation.userId,
+      conversationId: generation.conversationId,
+      generationId: generation.id,
+      messageId: generation.responseMessageId,
+      type,
+      payload,
+      state: { content, reasoningContent: reasoningContent || null, status },
+    });
+    return event.sequence;
+  }
+
+  private contentHash(content: string): string {
+    return createHmac('sha256', this.environment.LLM_USER_HASH_SECRET)
+      .update(content)
+      .digest('hex');
+  }
+
+  private async updateLastSequence(
+    generationId: string,
+    sequence: number,
+  ): Promise<void> {
+    await this.prisma.generation.updateMany({
+      where: { id: generationId },
+      data: { lastSequence: sequence, checkpointSequence: sequence },
+    });
   }
 
   private async loadContext(
@@ -420,11 +546,17 @@ export class GenerationProcessor {
   ): Promise<void> {
     const generation = await this.prisma.generation.findUnique({
       where: { id: generationId },
-      select: { responseMessageId: true, lastSequence: true },
+      select: {
+        id: true,
+        userId: true,
+        conversationId: true,
+        responseMessageId: true,
+        lastSequence: true,
+      },
     });
     if (!generation) return;
     const now = new Date();
-    await this.prisma.$transaction(async (transaction) => {
+    const cancelled = await this.prisma.$transaction(async (transaction) => {
       const transitioned = await transaction.generation.updateMany({
         where: {
           id: generationId,
@@ -444,7 +576,7 @@ export class GenerationProcessor {
           completedAt: now,
         },
       });
-      if (transitioned.count === 0) return;
+      if (transitioned.count === 0) return false;
       await transaction.message.update({
         where: { id: generation.responseMessageId },
         data: {
@@ -454,7 +586,19 @@ export class GenerationProcessor {
           completedAt: now,
         },
       });
+      return true;
     });
+    if (cancelled) {
+      const lastSequence = await this.publishEvent(
+        generation,
+        'generation.cancelled',
+        { partial: Boolean(content || reasoningContent) },
+        content,
+        reasoningContent,
+        'CANCELLED',
+      );
+      await this.updateLastSequence(generationId, lastSequence);
+    }
   }
 
   private async createUsage(

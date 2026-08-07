@@ -150,6 +150,7 @@ export const generationStatusSchema = z.enum([
   'FAILED',
   'CANCELLED',
 ]);
+export type GenerationStatus = z.infer<typeof generationStatusSchema>;
 
 export const createGenerationRequestSchema = z.object({
   content: z.string().trim().min(1).max(20_000),
@@ -196,3 +197,69 @@ export type CreateGenerationResponse = z.infer<
   typeof createGenerationResponseSchema
 >;
 export type GenerationJob = z.infer<typeof generationJobSchema>;
+
+export const generationEventTypeSchema = z.enum([
+  'generation.started',
+  'message.reasoning_delta',
+  'message.delta',
+  'message.snapshot',
+  'generation.usage',
+  'generation.completed',
+  'generation.failed',
+  'generation.cancelled',
+]);
+
+export const userEventSchema = z.object({
+  version: z.literal(1),
+  eventId: z.string().uuid(),
+  streamId: z.string().regex(/^\d+-\d+$/),
+  type: generationEventTypeSchema,
+  conversationId: z.string().uuid(),
+  generationId: z.string().uuid(),
+  messageId: z.string().uuid(),
+  sequence: z.number().int().positive(),
+  occurredAt: z.string().datetime(),
+  payload: z.record(z.string(), z.unknown()),
+});
+
+export const generationEventHistorySchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('events'),
+    events: z.array(userEventSchema),
+    lastSequence: z.number().int().nonnegative(),
+  }),
+  z.object({
+    mode: z.literal('snapshot'),
+    snapshot: z.object({
+      content: z.string(),
+      reasoningContent: z.string().nullable(),
+      sequence: z.number().int().nonnegative(),
+      status: generationStatusSchema,
+    }),
+  }),
+]);
+
+export type GenerationEventType = z.infer<typeof generationEventTypeSchema>;
+export type UserEvent = z.infer<typeof userEventSchema>;
+export type GenerationEventHistory = z.infer<
+  typeof generationEventHistorySchema
+>;
+
+export const generationSyncResponseSchema = z.object({
+  eventCursor: z.string().regex(/^\d+-\d+$/),
+  activeGenerations: z.array(
+    z.object({
+      generationId: z.string().uuid(),
+      conversationId: z.string().uuid(),
+      messageId: z.string().uuid(),
+      status: generationStatusSchema,
+      content: z.string(),
+      reasoningContent: z.string().nullable(),
+      sequence: z.number().int().nonnegative(),
+    }),
+  ),
+});
+
+export type GenerationSyncResponse = z.infer<
+  typeof generationSyncResponseSchema
+>;

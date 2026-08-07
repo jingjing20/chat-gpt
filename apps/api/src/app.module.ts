@@ -8,6 +8,7 @@ import { RequestIdMiddleware } from './http/request-id.middleware';
 import { ProtectedResourceController } from './protected-resource.controller';
 import { GenerationsModule } from './generations/generations.module';
 import { OutboxModule } from './outbox/outbox.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { OutboxModule } from './outbox/outbox.module';
     ConversationsModule,
     GenerationsModule,
     OutboxModule,
+    EventsModule,
   ],
   controllers: [HealthController, ProtectedResourceController],
   providers: [],

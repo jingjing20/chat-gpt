@@ -19,7 +19,9 @@ test('恶意 Markdown 不能执行，刷新后对话和消息仍然存在', asyn
   await page.getByRole('button', { name: '发送消息' }).click();
 
   await expect(page.getByText('安全文本')).toBeVisible();
-  await expect(page.getByText(/阶段 2 的静态回复/)).toBeVisible();
+  await page.getByText('推理过程').click();
+  await expect(page.getByText('安全分析')).toBeVisible();
+  await expect(page.getByText(/这是实时流式回复/)).toBeVisible();
   expect(
     await page.locator('script').filter({ hasText: '__xssExecuted' }).count(),
   ).toBe(0);
@@ -35,7 +37,7 @@ test('恶意 Markdown 不能执行，刷新后对话和消息仍然存在', asyn
 
   await page.reload();
   await expect(page.getByText('安全文本')).toBeVisible();
-  await expect(page.getByText(/阶段 2 的静态回复/)).toBeVisible();
+  await expect(page.getByText(/这是实时流式回复/)).toBeVisible();
   expect(
     await page.evaluate(() =>
       Boolean(

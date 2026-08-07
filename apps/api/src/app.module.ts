@@ -6,9 +6,18 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { HealthController } from './health.controller';
 import { RequestIdMiddleware } from './http/request-id.middleware';
 import { ProtectedResourceController } from './protected-resource.controller';
+import { GenerationsModule } from './generations/generations.module';
+import { OutboxModule } from './outbox/outbox.module';
 
 @Module({
-  imports: [AppConfigModule, DatabaseModule, AuthModule, ConversationsModule],
+  imports: [
+    AppConfigModule,
+    DatabaseModule,
+    AuthModule,
+    ConversationsModule,
+    GenerationsModule,
+    OutboxModule,
+  ],
   controllers: [HealthController, ProtectedResourceController],
   providers: [],
 })

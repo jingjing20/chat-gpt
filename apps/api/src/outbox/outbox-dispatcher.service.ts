@@ -1,0 +1,112 @@
+import type { ApiEnv } from '@chat/config';
+import { generationJobSchema, type GenerationJob } from '@chat/contracts';
+import { Prisma } from '@chat/database';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnApplicationShutdown,
+} from '@nestjs/common';
+import type { Queue } from 'bullmq';
+import { API_ENV } from '../config/app-config';
+import { PrismaService } from '../database/prisma.service';
+import { GENERATION_QUEUE } from './outbox.constants';
+
+interface PendingOutboxRow {
+  id: string;
+  aggregate_id: string;
+  payload: Prisma.JsonValue;
+}
+
+@Injectable()
+export class OutboxDispatcherService
+  implements OnApplicationBootstrap, OnApplicationShutdown
+{
+  private readonly logger = new Logger(OutboxDispatcherService.name);
+  private timer?: NodeJS.Timeout;
+  private dispatching = false;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(GENERATION_QUEUE) private readonly queue: Queue<GenerationJob>,
+    @Inject(API_ENV) private readonly environment: ApiEnv,
+  ) {}
+
+  onApplicationBootstrap(): void {
+    this.timer = setInterval(() => {
+      void this.dispatchOnce();
+    }, this.environment.OUTBOX_DISPATCH_INTERVAL_MS);
+    this.timer.unref();
+    void this.dispatchOnce();
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    if (this.timer) clearInterval(this.timer);
+    await this.queue.close();
+  }
+
+  async dispatchOnce(): Promise<number> {
+    if (this.dispatching) return 0;
+    this.dispatching = true;
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const rows = await transaction.$queryRaw<PendingOutboxRow[]>(Prisma.sql`
+          SELECT "id", "aggregate_id", "payload"
+          FROM "outbox_events"
+          WHERE "published_at" IS NULL
+            AND "type" = 'generation.enqueue'
+          ORDER BY "created_at" ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT ${this.environment.OUTBOX_DISPATCH_BATCH_SIZE}
+        `);
+        let published = 0;
+        for (const row of rows) {
+          const parsed = generationJobSchema.safeParse(row.payload);
+          if (
+            !parsed.success ||
+            parsed.data.generationId !== row.aggregate_id
+          ) {
+            await transaction.outboxEvent.update({
+              where: { id: row.id },
+              data: {
+                attempts: { increment: 1 },
+                lastError: 'INVALID_PAYLOAD',
+              },
+            });
+            continue;
+          }
+          try {
+            await this.queue.add('generate', parsed.data, {
+              jobId: parsed.data.generationId,
+              attempts: 1,
+              removeOnComplete: false,
+              removeOnFail: false,
+            });
+            await transaction.outboxEvent.update({
+              where: { id: row.id },
+              data: {
+                publishedAt: new Date(),
+                attempts: { increment: 1 },
+                lastError: null,
+              },
+            });
+            published += 1;
+          } catch {
+            await transaction.outboxEvent.update({
+              where: { id: row.id },
+              data: {
+                attempts: { increment: 1 },
+                lastError: 'QUEUE_PUBLISH_FAILED',
+              },
+            });
+            this.logger.warn(`Outbox 投递失败 eventId=${row.id}`);
+          }
+        }
+        return published;
+      });
+    } finally {
+      this.dispatching = false;
+    }
+  }
+}

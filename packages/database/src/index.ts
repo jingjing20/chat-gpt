@@ -1,7 +1,10 @@
 export {
   AuditAction,
   AuditOutcome,
+  GenerationAttemptStatus,
+  GenerationStatus,
   MessageRole,
+  MessageStatus,
   Prisma,
   PrismaClient,
   UserStatus,
@@ -10,7 +13,11 @@ export type {
   AuditLog,
   Conversation,
   ConversationUserState,
+  Generation,
+  GenerationAttempt,
   Message,
+  OutboxEvent,
   RefreshSession,
   User,
+  UsageRecord,
 } from '@prisma/client';

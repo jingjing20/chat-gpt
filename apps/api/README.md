@@ -41,3 +41,13 @@ POST   /api/v1/conversations/{conversationId}/messages
 ```
 
 所有接口都从认证上下文取得用户 ID，并在数据库查询中限定所有者作用域。跨用户访问统一返回 `404 NOT_FOUND`。消息接口暂不调用模型：每条用户消息会在同一事务中得到一条固定 assistant 回复，用于验证持久化、分页和长列表 UI。
+
+## 阶段 4 Generation 接口
+
+```text
+POST   /api/v1/conversations/{conversationId}/generations
+GET    /api/v1/generations/{generationId}
+POST   /api/v1/generations/{generationId}/cancel
+```
+
+创建接口要求 `Idempotency-Key`，只负责在事务内持久化任务并返回 `202`。API 不调用模型，也不等待首 token。Outbox Dispatcher 使用数据库行锁领取事件，BullMQ Job ID 固定为 generation ID。

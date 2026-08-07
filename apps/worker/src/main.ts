@@ -1,16 +1,10 @@
-import { readWorkerEnv } from '@chat/config';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { config as loadEnv } from 'dotenv';
-import { resolve } from 'node:path';
 import { AppModule } from './app.module';
+import { loadWorkerEnv } from './config/worker-config';
 
 async function bootstrap() {
-  loadEnv({
-    path: process.env.ENV_FILE ?? resolve(process.cwd(), '../../.env'),
-    quiet: true,
-  });
-  const environment = readWorkerEnv(process.env);
+  const environment = loadWorkerEnv();
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
 

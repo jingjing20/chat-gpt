@@ -11,3 +11,5 @@ pnpm --filter @chat/database db:migrate:dev
 ```
 
 迁移命令读取根目录 `.env` 中的 `DATABASE_URL`。生产部署使用 `db:migrate:deploy`，不要在生产环境运行交互式开发迁移。
+
+阶段 4 增加 `generations`、`generation_attempts`、`usage_records` 和 `outbox_events`。创建 generation 时，用户消息、assistant 占位、generation 和 outbox 必须在同一事务中写入。

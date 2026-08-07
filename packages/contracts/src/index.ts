@@ -79,6 +79,13 @@ export const createMessageRequestSchema = z.object({
 });
 
 export const messageRoleSchema = z.enum(['USER', 'ASSISTANT', 'SYSTEM']);
+export const messageStatusSchema = z.enum([
+  'PENDING',
+  'STREAMING',
+  'COMPLETED',
+  'FAILED',
+  'CANCELLED',
+]);
 
 export const conversationResponseSchema = z.object({
   id: z.string().uuid(),
@@ -99,7 +106,10 @@ export const messageResponseSchema = z.object({
   id: z.string().uuid(),
   conversationId: z.string().uuid(),
   role: messageRoleSchema,
+  status: messageStatusSchema,
   content: z.string(),
+  reasoningContent: z.string().nullable(),
+  completedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
 });
 
@@ -130,3 +140,59 @@ export type ConversationListResponse = z.infer<
 export type MessageResponse = z.infer<typeof messageResponseSchema>;
 export type MessagePageResponse = z.infer<typeof messagePageResponseSchema>;
 export type CreateMessageResponse = z.infer<typeof createMessageResponseSchema>;
+
+export const generationStatusSchema = z.enum([
+  'QUEUED',
+  'STARTING',
+  'STREAMING',
+  'CANCEL_REQUESTED',
+  'COMPLETED',
+  'FAILED',
+  'CANCELLED',
+]);
+
+export const createGenerationRequestSchema = z.object({
+  content: z.string().trim().min(1).max(20_000),
+  model: z.string().trim().min(1).max(100),
+  clientMessageId: z.string().uuid(),
+});
+
+export const generationResponseSchema = z.object({
+  id: z.string().uuid(),
+  conversationId: z.string().uuid(),
+  requestMessageId: z.string().uuid(),
+  responseMessageId: z.string().uuid(),
+  provider: z.string(),
+  model: z.string(),
+  status: generationStatusSchema,
+  lastSequence: z.number().int().nonnegative(),
+  finishReason: z.string().nullable(),
+  errorCode: z.string().nullable(),
+  errorDetailSafe: z.string().nullable(),
+  cancelRequestedAt: z.string().datetime().nullable(),
+  startedAt: z.string().datetime().nullable(),
+  firstTokenAt: z.string().datetime().nullable(),
+  completedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const createGenerationResponseSchema = z.object({
+  conversation: z.object({ id: z.string().uuid() }),
+  userMessage: messageResponseSchema,
+  assistantMessage: messageResponseSchema,
+  generation: generationResponseSchema,
+});
+
+export const generationJobSchema = z.object({
+  generationId: z.string().uuid(),
+});
+
+export type CreateGenerationRequest = z.infer<
+  typeof createGenerationRequestSchema
+>;
+export type GenerationResponse = z.infer<typeof generationResponseSchema>;
+export type CreateGenerationResponse = z.infer<
+  typeof createGenerationResponseSchema
+>;
+export type GenerationJob = z.infer<typeof generationJobSchema>;

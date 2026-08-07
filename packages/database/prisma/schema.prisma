@@ -32,6 +32,31 @@ enum MessageRole {
   SYSTEM
 }
 
+enum MessageStatus {
+  PENDING
+  STREAMING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum GenerationStatus {
+  QUEUED
+  STARTING
+  STREAMING
+  CANCEL_REQUESTED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum GenerationAttemptStatus {
+  STARTED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
 model User {
   id                 String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email              String                  @unique @db.Citext
@@ -44,6 +69,7 @@ model User {
   conversations      Conversation[]
   conversationStates ConversationUserState[]
   messages           Message[]
+  generations        Generation[]
 
   @@map("users")
 }
@@ -58,6 +84,7 @@ model Conversation {
   owner         User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
   userStates    ConversationUserState[]
   messages      Message[]
+  generations   Generation[]
 
   @@index([ownerUserId, updatedAt(sort: Desc), id(sort: Desc)])
   @@map("conversations")
@@ -80,17 +107,112 @@ model ConversationUserState {
 }
 
 model Message {
-  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  conversationId String       @map("conversation_id") @db.Uuid
-  authorUserId   String?      @map("author_user_id") @db.Uuid
-  role           MessageRole
-  content        String       @db.Text
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  author         User?        @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  id                  String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId      String        @map("conversation_id") @db.Uuid
+  authorUserId        String?       @map("author_user_id") @db.Uuid
+  role                MessageRole
+  status              MessageStatus @default(COMPLETED)
+  content             String        @db.Text
+  reasoningContent    String?       @map("reasoning_content") @db.Text
+  parentMessageId     String?       @map("parent_message_id") @db.Uuid
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  completedAt         DateTime?     @map("completed_at") @db.Timestamptz(3)
+  conversation        Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author              User?         @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  parent              Message?      @relation("MessageParent", fields: [parentMessageId], references: [id], onDelete: SetNull)
+  children            Message[]     @relation("MessageParent")
+  requestedGeneration Generation?   @relation("GenerationRequestMessage")
+  responseGeneration  Generation?   @relation("GenerationResponseMessage")
 
   @@index([conversationId, createdAt(sort: Desc), id(sort: Desc)])
   @@map("messages")
+}
+
+model Generation {
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String              @map("user_id") @db.Uuid
+  conversationId     String              @map("conversation_id") @db.Uuid
+  requestMessageId   String              @unique @map("request_message_id") @db.Uuid
+  responseMessageId  String              @unique @map("response_message_id") @db.Uuid
+  provider           String              @db.VarChar(50)
+  model              String              @db.VarChar(100)
+  status             GenerationStatus    @default(QUEUED)
+  lastSequence       BigInt              @default(0) @map("last_sequence")
+  checkpointSequence BigInt              @default(0) @map("checkpoint_sequence")
+  idempotencyKey     String              @map("idempotency_key") @db.VarChar(100)
+  requestHash        String              @map("request_hash") @db.Char(64)
+  finishReason       String?             @map("finish_reason") @db.VarChar(50)
+  providerRequestId  String?             @map("provider_request_id")
+  errorCode          String?             @map("error_code") @db.VarChar(100)
+  errorDetailSafe    String?             @map("error_detail_safe")
+  cancelRequestedAt  DateTime?           @map("cancel_requested_at") @db.Timestamptz(3)
+  startedAt          DateTime?           @map("started_at") @db.Timestamptz(3)
+  firstTokenAt       DateTime?           @map("first_token_at") @db.Timestamptz(3)
+  completedAt        DateTime?           @map("completed_at") @db.Timestamptz(3)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation       Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  requestMessage     Message             @relation("GenerationRequestMessage", fields: [requestMessageId], references: [id], onDelete: Cascade)
+  responseMessage    Message             @relation("GenerationResponseMessage", fields: [responseMessageId], references: [id], onDelete: Cascade)
+  attempts           GenerationAttempt[]
+  usageRecords       UsageRecord[]
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, status, createdAt])
+  @@index([conversationId, createdAt])
+  @@map("generations")
+}
+
+model GenerationAttempt {
+  id                 String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  generationId       String                  @map("generation_id") @db.Uuid
+  attemptNo          Int                     @map("attempt_no")
+  status             GenerationAttemptStatus @default(STARTED)
+  providerRequestId  String?                 @map("provider_request_id")
+  startedAt          DateTime                @default(now()) @map("started_at") @db.Timestamptz(3)
+  endedAt            DateTime?               @map("ended_at") @db.Timestamptz(3)
+  receivedFirstDelta Boolean                 @default(false) @map("received_first_delta")
+  httpStatus         Int?                    @map("http_status")
+  errorCode          String?                 @map("error_code") @db.VarChar(100)
+  generation         Generation              @relation(fields: [generationId], references: [id], onDelete: Cascade)
+
+  @@unique([generationId, attemptNo])
+  @@map("generation_attempts")
+}
+
+model UsageRecord {
+  id               String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  generationId     String     @map("generation_id") @db.Uuid
+  provider         String     @db.VarChar(50)
+  model            String     @db.VarChar(100)
+  promptTokens     Int?       @map("prompt_tokens")
+  completionTokens Int?       @map("completion_tokens")
+  totalTokens      Int?       @map("total_tokens")
+  reasoningTokens  Int?       @map("reasoning_tokens")
+  cacheHitTokens   Int?       @map("cache_hit_tokens")
+  cacheMissTokens  Int?       @map("cache_miss_tokens")
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  generation       Generation @relation(fields: [generationId], references: [id], onDelete: Cascade)
+
+  @@index([generationId, createdAt])
+  @@map("usage_records")
+}
+
+model OutboxEvent {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  aggregateType String    @map("aggregate_type") @db.VarChar(50)
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  type          String    @db.VarChar(100)
+  payload       Json
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(3)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") @db.VarChar(500)
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox_events")
 }
 
 model RefreshSession {

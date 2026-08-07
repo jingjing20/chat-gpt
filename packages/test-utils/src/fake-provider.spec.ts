@@ -21,6 +21,20 @@ describe('FakeLlmProvider', () => {
     expect(provider.requests).toEqual([request]);
   });
 
+  it('可以为连续上游尝试提供不同脚本', async () => {
+    const provider = FakeLlmProvider.attempts([
+      [{ error: 'RATE_LIMITED' }],
+      [{ event: { type: 'finish', finishReason: 'stop' } }],
+    ]);
+    await expect(
+      collect(provider.streamChat(request, new AbortController().signal)),
+    ).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+    await expect(
+      collect(provider.streamChat(request, new AbortController().signal)),
+    ).resolves.toEqual([{ type: 'finish', finishReason: 'stop' }]);
+    expect(provider.requests).toHaveLength(2);
+  });
+
   it('能在首个 delta 前和第 K 个 delta 后注入错误', async () => {
     const before = new FakeLlmProvider([{ error: 'RATE_LIMITED' }]);
     await expect(

@@ -1,0 +1,556 @@
+import type { WorkerEnv } from '@chat/config';
+import {
+  GenerationAttemptStatus,
+  GenerationStatus,
+  MessageRole,
+  MessageStatus,
+  Prisma,
+} from '@chat/database';
+import {
+  ProviderError,
+  type LlmProviderAdapter,
+  type NormalizedChatMessage,
+  type NormalizedUsage,
+} from '@chat/llm';
+import { Inject, Injectable } from '@nestjs/common';
+import { createHmac } from 'node:crypto';
+import { WORKER_ENV } from '../config/worker-config';
+import { PrismaService } from '../database/prisma.service';
+import { LLM_PROVIDER_ADAPTER } from './generation.constants';
+
+const TERMINAL_STATUSES = [
+  GenerationStatus.COMPLETED,
+  GenerationStatus.FAILED,
+  GenerationStatus.CANCELLED,
+] as const;
+
+@Injectable()
+export class GenerationProcessor {
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(LLM_PROVIDER_ADAPTER)
+    private readonly provider: LlmProviderAdapter,
+    @Inject(WORKER_ENV) private readonly environment: WorkerEnv,
+  ) {}
+
+  async process(generationId: string): Promise<void> {
+    let generation = await this.prisma.generation.findUnique({
+      where: { id: generationId },
+    });
+    if (!generation) return;
+    const currentStatus = generation.status;
+    if (TERMINAL_STATUSES.some((status) => status === currentStatus)) return;
+    if (generation.status === GenerationStatus.CANCEL_REQUESTED) {
+      await this.finalizeCancelled(
+        generationId,
+        '',
+        '',
+        Number(generation.lastSequence),
+      );
+      return;
+    }
+    if (generation.status === GenerationStatus.QUEUED) {
+      const claimed = await this.prisma.generation.updateMany({
+        where: { id: generationId, status: GenerationStatus.QUEUED },
+        data: { status: GenerationStatus.STARTING, startedAt: new Date() },
+      });
+      if (claimed.count === 0) return;
+      generation = await this.prisma.generation.findUniqueOrThrow({
+        where: { id: generationId },
+      });
+    } else if (generation.status !== GenerationStatus.STARTING) {
+      return;
+    }
+
+    const messages = await this.loadContext(
+      generation.conversationId,
+      generation.responseMessageId,
+    );
+    await this.prisma.generationAttempt.updateMany({
+      where: { generationId, status: GenerationAttemptStatus.STARTED },
+      data: {
+        status: GenerationAttemptStatus.FAILED,
+        endedAt: new Date(),
+        errorCode: 'WORKER_INTERRUPTED',
+      },
+    });
+    const initialAttemptCount = await this.prisma.generationAttempt.count({
+      where: { generationId },
+    });
+    let content = '';
+    let reasoningContent = '';
+    let sequence = Number(generation.lastSequence);
+
+    if (initialAttemptCount >= this.environment.GENERATION_MAX_ATTEMPTS) {
+      await this.finalizeFailed({
+        generationId,
+        responseMessageId: generation.responseMessageId,
+        content,
+        reasoningContent,
+        sequence,
+        error: new ProviderError({
+          code: 'UNKNOWN',
+          retryableBeforeFirstDelta: false,
+          safeMessage: '生成任务重试次数已耗尽',
+        }),
+        provider: generation.provider,
+        model: generation.model,
+      });
+      return;
+    }
+
+    for (
+      let attemptNo = initialAttemptCount + 1;
+      attemptNo <= this.environment.GENERATION_MAX_ATTEMPTS;
+      attemptNo += 1
+    ) {
+      if (await this.isCancellationRequested(generationId)) {
+        await this.finalizeCancelled(
+          generationId,
+          content,
+          reasoningContent,
+          sequence,
+        );
+        return;
+      }
+      const controller = new AbortController();
+      let cancelObserved = false;
+      let cancellationCheckRunning = false;
+      const cancelTimer = setInterval(() => {
+        if (cancellationCheckRunning) return;
+        cancellationCheckRunning = true;
+        void this.isCancellationRequested(generationId)
+          .then((requested) => {
+            if (requested) {
+              cancelObserved = true;
+              controller.abort(new DOMException('任务已取消', 'AbortError'));
+            }
+          })
+          .finally(() => {
+            cancellationCheckRunning = false;
+          });
+      }, this.environment.GENERATION_CANCEL_POLL_MS);
+      cancelTimer.unref();
+
+      const attempt = await this.prisma.generationAttempt.create({
+        data: { generationId, attemptNo },
+      });
+      let receivedFirstDelta = false;
+      let usage: NormalizedUsage | undefined;
+      let finishReason: string | null = null;
+      let providerRequestId: string | null = null;
+
+      try {
+        for await (const event of this.provider.streamChat(
+          {
+            model: generation.model,
+            messages,
+            maxOutputTokens: this.environment.LLM_MAX_OUTPUT_TOKENS,
+            reasoning: {
+              enabled: this.environment.LLM_REASONING_MODE === 'enabled',
+              effort: this.environment.LLM_REASONING_EFFORT,
+            },
+            userId: this.providerUserId(generation.userId),
+          },
+          controller.signal,
+        )) {
+          if (event.type === 'content_delta') {
+            content += event.delta;
+            sequence += 1;
+            if (!receivedFirstDelta) {
+              receivedFirstDelta = true;
+              await this.markStreaming(
+                generationId,
+                generation.responseMessageId,
+              );
+            }
+          } else if (event.type === 'reasoning_delta') {
+            reasoningContent += event.delta;
+            sequence += 1;
+            if (!receivedFirstDelta) {
+              receivedFirstDelta = true;
+              await this.markStreaming(
+                generationId,
+                generation.responseMessageId,
+              );
+            }
+          } else if (event.type === 'usage') {
+            usage = event.usage;
+          } else {
+            finishReason = event.finishReason;
+            providerRequestId = event.providerRequestId ?? null;
+          }
+        }
+
+        if (
+          cancelObserved ||
+          (await this.isCancellationRequested(generationId))
+        ) {
+          await this.completeAttempt(
+            attempt.id,
+            GenerationAttemptStatus.CANCELLED,
+            receivedFirstDelta,
+          );
+          await this.finalizeCancelled(
+            generationId,
+            content,
+            reasoningContent,
+            sequence,
+          );
+          return;
+        }
+        await this.completeAttempt(
+          attempt.id,
+          GenerationAttemptStatus.COMPLETED,
+          receivedFirstDelta,
+          undefined,
+          providerRequestId,
+        );
+        await this.finalizeCompleted({
+          generationId,
+          responseMessageId: generation.responseMessageId,
+          content,
+          reasoningContent,
+          sequence,
+          finishReason,
+          providerRequestId,
+          usage,
+          provider: generation.provider,
+          model: generation.model,
+        });
+        return;
+      } catch (error) {
+        if (
+          cancelObserved ||
+          (await this.isCancellationRequested(generationId))
+        ) {
+          await this.completeAttempt(
+            attempt.id,
+            GenerationAttemptStatus.CANCELLED,
+            receivedFirstDelta,
+          );
+          await this.finalizeCancelled(
+            generationId,
+            content,
+            reasoningContent,
+            sequence,
+          );
+          return;
+        }
+        const normalized = this.normalizeError(error, receivedFirstDelta);
+        await this.completeAttempt(
+          attempt.id,
+          GenerationAttemptStatus.FAILED,
+          receivedFirstDelta,
+          normalized,
+        );
+        const canRetry =
+          !receivedFirstDelta &&
+          normalized.retryableBeforeFirstDelta &&
+          attemptNo < this.environment.GENERATION_MAX_ATTEMPTS;
+        if (canRetry) {
+          await this.retryDelay(attemptNo);
+          continue;
+        }
+        await this.finalizeFailed({
+          generationId,
+          responseMessageId: generation.responseMessageId,
+          content,
+          reasoningContent,
+          sequence,
+          error: normalized,
+          usage,
+          provider: generation.provider,
+          model: generation.model,
+        });
+        return;
+      } finally {
+        clearInterval(cancelTimer);
+        controller.abort();
+      }
+    }
+  }
+
+  private async loadContext(
+    conversationId: string,
+    responseMessageId: string,
+  ): Promise<NormalizedChatMessage[]> {
+    const messages = await this.prisma.message.findMany({
+      where: {
+        conversationId,
+        id: { not: responseMessageId },
+        status: MessageStatus.COMPLETED,
+        role: {
+          in: [MessageRole.SYSTEM, MessageRole.USER, MessageRole.ASSISTANT],
+        },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { role: true, content: true },
+    });
+    return messages.map((message) => ({
+      role: message.role.toLowerCase() as NormalizedChatMessage['role'],
+      content: message.content,
+    }));
+  }
+
+  private async markStreaming(
+    generationId: string,
+    responseMessageId: string,
+  ): Promise<void> {
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.generation.updateMany({
+        where: { id: generationId, status: GenerationStatus.STARTING },
+        data: { status: GenerationStatus.STREAMING, firstTokenAt: now },
+      }),
+      this.prisma.message.updateMany({
+        where: { id: responseMessageId, status: MessageStatus.PENDING },
+        data: { status: MessageStatus.STREAMING },
+      }),
+    ]);
+  }
+
+  private async completeAttempt(
+    attemptId: string,
+    status: GenerationAttemptStatus,
+    receivedFirstDelta: boolean,
+    error?: ProviderError,
+    providerRequestId?: string | null,
+  ): Promise<void> {
+    await this.prisma.generationAttempt.update({
+      where: { id: attemptId },
+      data: {
+        status,
+        endedAt: new Date(),
+        receivedFirstDelta,
+        providerRequestId: providerRequestId ?? null,
+        httpStatus: error?.httpStatus ?? null,
+        errorCode: error?.code ?? null,
+      },
+    });
+  }
+
+  private async finalizeCompleted(input: FinalizeInput): Promise<void> {
+    const now = new Date();
+    await this.prisma.$transaction(async (transaction) => {
+      const transitioned = await transaction.generation.updateMany({
+        where: {
+          id: input.generationId,
+          status: {
+            in: [GenerationStatus.STARTING, GenerationStatus.STREAMING],
+          },
+        },
+        data: {
+          status: GenerationStatus.COMPLETED,
+          lastSequence: input.sequence,
+          checkpointSequence: input.sequence,
+          finishReason: input.finishReason,
+          providerRequestId: input.providerRequestId,
+          completedAt: now,
+        },
+      });
+      if (transitioned.count === 0) return;
+      await transaction.message.update({
+        where: { id: input.responseMessageId },
+        data: {
+          status: MessageStatus.COMPLETED,
+          content: input.content,
+          reasoningContent: this.savedReasoning(input.reasoningContent),
+          completedAt: now,
+        },
+      });
+      if (input.usage) await this.createUsage(transaction, input, input.usage);
+    });
+    if (await this.isCancellationRequested(input.generationId)) {
+      await this.finalizeCancelled(
+        input.generationId,
+        input.content,
+        input.reasoningContent,
+        input.sequence,
+      );
+    }
+  }
+
+  private async finalizeFailed(input: FailureInput): Promise<void> {
+    const now = new Date();
+    await this.prisma.$transaction(async (transaction) => {
+      const transitioned = await transaction.generation.updateMany({
+        where: {
+          id: input.generationId,
+          status: {
+            in: [GenerationStatus.STARTING, GenerationStatus.STREAMING],
+          },
+        },
+        data: {
+          status: GenerationStatus.FAILED,
+          lastSequence: input.sequence,
+          checkpointSequence: input.sequence,
+          errorCode: input.error.code,
+          errorDetailSafe: input.error.message,
+          completedAt: now,
+        },
+      });
+      if (transitioned.count === 0) return;
+      await transaction.message.update({
+        where: { id: input.responseMessageId },
+        data: {
+          status: MessageStatus.FAILED,
+          content: input.content,
+          reasoningContent: this.savedReasoning(input.reasoningContent),
+          completedAt: now,
+        },
+      });
+      if (input.usage) await this.createUsage(transaction, input, input.usage);
+    });
+    if (await this.isCancellationRequested(input.generationId)) {
+      await this.finalizeCancelled(
+        input.generationId,
+        input.content,
+        input.reasoningContent,
+        input.sequence,
+      );
+    }
+  }
+
+  private async finalizeCancelled(
+    generationId: string,
+    content: string,
+    reasoningContent: string,
+    sequence: number,
+  ): Promise<void> {
+    const generation = await this.prisma.generation.findUnique({
+      where: { id: generationId },
+      select: { responseMessageId: true, lastSequence: true },
+    });
+    if (!generation) return;
+    const now = new Date();
+    await this.prisma.$transaction(async (transaction) => {
+      const transitioned = await transaction.generation.updateMany({
+        where: {
+          id: generationId,
+          status: {
+            in: [
+              GenerationStatus.QUEUED,
+              GenerationStatus.STARTING,
+              GenerationStatus.STREAMING,
+              GenerationStatus.CANCEL_REQUESTED,
+            ],
+          },
+        },
+        data: {
+          status: GenerationStatus.CANCELLED,
+          lastSequence: sequence,
+          checkpointSequence: sequence,
+          completedAt: now,
+        },
+      });
+      if (transitioned.count === 0) return;
+      await transaction.message.update({
+        where: { id: generation.responseMessageId },
+        data: {
+          status: MessageStatus.CANCELLED,
+          content,
+          reasoningContent: this.savedReasoning(reasoningContent),
+          completedAt: now,
+        },
+      });
+    });
+  }
+
+  private async createUsage(
+    transaction: Prisma.TransactionClient,
+    input: { generationId: string; provider: string; model: string },
+    usage: NormalizedUsage,
+  ): Promise<void> {
+    await transaction.usageRecord.create({
+      data: {
+        generationId: input.generationId,
+        provider: input.provider,
+        model: input.model,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        totalTokens: usage.totalTokens,
+        reasoningTokens: usage.reasoningTokens,
+        cacheHitTokens: usage.cacheHitTokens,
+        cacheMissTokens: usage.cacheMissTokens,
+      },
+    });
+  }
+
+  private savedReasoning(reasoningContent: string): string | null {
+    return this.environment.LLM_REASONING_MODE === 'enabled'
+      ? reasoningContent || null
+      : null;
+  }
+
+  private providerUserId(userId: string): string {
+    return createHmac('sha256', this.environment.LLM_USER_HASH_SECRET)
+      .update(userId)
+      .digest('base64url');
+  }
+
+  private async isCancellationRequested(
+    generationId: string,
+  ): Promise<boolean> {
+    const generation = await this.prisma.generation.findUnique({
+      where: { id: generationId },
+      select: { status: true },
+    });
+    return generation?.status === GenerationStatus.CANCEL_REQUESTED;
+  }
+
+  private normalizeError(
+    error: unknown,
+    receivedFirstDelta: boolean,
+  ): ProviderError {
+    if (error instanceof ProviderError) {
+      if (!receivedFirstDelta || !error.retryableBeforeFirstDelta) return error;
+      return new ProviderError({
+        code: error.code,
+        retryableBeforeFirstDelta: false,
+        safeMessage: error.message,
+        ...(error.httpStatus === undefined
+          ? {}
+          : { httpStatus: error.httpStatus }),
+        cause: error,
+      });
+    }
+    return new ProviderError({
+      code: 'UNKNOWN',
+      retryableBeforeFirstDelta: false,
+      safeMessage: '生成任务执行失败',
+      cause: error,
+    });
+  }
+
+  private async retryDelay(attemptNo: number): Promise<void> {
+    const delay =
+      this.environment.GENERATION_RETRY_BASE_DELAY_MS * 2 ** (attemptNo - 1);
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+}
+
+interface FinalizeInput {
+  generationId: string;
+  responseMessageId: string;
+  content: string;
+  reasoningContent: string;
+  sequence: number;
+  finishReason: string | null;
+  providerRequestId: string | null;
+  usage?: NormalizedUsage;
+  provider: string;
+  model: string;
+}
+
+interface FailureInput {
+  generationId: string;
+  responseMessageId: string;
+  content: string;
+  reasoningContent: string;
+  sequence: number;
+  error: ProviderError;
+  usage?: NormalizedUsage;
+  provider: string;
+  model: string;
+}

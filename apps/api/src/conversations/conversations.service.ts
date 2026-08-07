@@ -5,7 +5,7 @@ import type {
   MessagePageResponse,
   MessageResponse,
 } from '@chat/contracts';
-import { MessageRole, Prisma } from '@chat/database';
+import { MessageRole, MessageStatus, Prisma } from '@chat/database';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ApiException } from '../http/api-exception';
@@ -132,16 +132,20 @@ export class ConversationsService {
             conversationId,
             authorUserId: userId,
             role: MessageRole.USER,
+            status: MessageStatus.COMPLETED,
             content,
             createdAt: userCreatedAt,
+            completedAt: userCreatedAt,
           },
         });
         const createdAssistantMessage = await transaction.message.create({
           data: {
             conversationId,
             role: MessageRole.ASSISTANT,
+            status: MessageStatus.COMPLETED,
             content: STATIC_ASSISTANT_MESSAGE,
             createdAt: assistantCreatedAt,
+            completedAt: assistantCreatedAt,
           },
         });
         await transaction.conversation.update({
@@ -248,15 +252,21 @@ export class ConversationsService {
     id: string;
     conversationId: string;
     role: MessageRole;
+    status: MessageStatus;
     content: string;
+    reasoningContent: string | null;
     createdAt: Date;
+    completedAt: Date | null;
   }): MessageResponse {
     return {
       id: message.id,
       conversationId: message.conversationId,
       role: message.role,
+      status: message.status,
       content: message.content,
+      reasoningContent: message.reasoningContent,
       createdAt: message.createdAt.toISOString(),
+      completedAt: message.completedAt?.toISOString() ?? null,
     };
   }
 

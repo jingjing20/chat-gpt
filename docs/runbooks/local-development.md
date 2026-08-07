@@ -64,6 +64,20 @@ curl http://localhost:3002/health/ready
 
 API 的 `ready` 会验证配置和 PostgreSQL 连接；Worker 验证自身配置。阶段 3 可按 `apps/worker/README.md` 使用仅开发环境开放的入口显式执行真实供应商冒烟测试，默认自动化测试只使用固定流和 Fake Provider。
 
+## 阶段 4 异步 Generation
+
+启动 API 和 Worker 前先应用数据库迁移：
+
+```bash
+pnpm db:migrate:deploy
+pnpm dev:api
+pnpm dev:worker
+```
+
+API 创建 generation 后立即返回 `202 Accepted`。Outbox Dispatcher 会把任务可靠投递到 BullMQ，Worker 独立消费并写回 PostgreSQL。可以通过 `GET /api/v1/generations/:generationId` 轮询状态，通过 `POST /api/v1/generations/:generationId/cancel` 请求取消。
+
+队列前缀必须按环境隔离。生产环境还必须替换 `LLM_USER_HASH_SECRET`，该密钥只用于生成不可逆的供应商用户隔离标识。完整请求示例和验收证据见 [阶段 4 验收记录](../phase-4-acceptance.md)。
+
 ## 停止
 
 ```bash

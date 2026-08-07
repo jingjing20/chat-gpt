@@ -17,14 +17,22 @@ export type FakeProviderStep =
 export class FakeLlmProvider implements LlmProviderAdapter {
   readonly requests: NormalizedChatRequest[] = [];
 
-  constructor(private readonly steps: FakeProviderStep[]) {}
+  constructor(
+    private readonly steps: FakeProviderStep[],
+    private readonly attemptScripts?: FakeProviderStep[][],
+  ) {}
 
   async *streamChat(
     request: NormalizedChatRequest,
     signal: AbortSignal,
   ): AsyncIterable<NormalizedLlmEvent> {
+    const requestIndex = this.requests.length;
     this.requests.push(structuredClone(request));
-    for (const step of this.steps) {
+    const steps =
+      this.attemptScripts?.[requestIndex] ??
+      this.attemptScripts?.at(-1) ??
+      this.steps;
+    for (const step of steps) {
       await abortableDelay(step.delayMs ?? 0, signal);
       if ('error' in step) {
         throw new ProviderError({
@@ -45,6 +53,10 @@ export class FakeLlmProvider implements LlmProviderAdapter {
       })),
       { event: { type: 'finish', finishReason: 'stop' } },
     ]);
+  }
+
+  static attempts(scripts: FakeProviderStep[][]): FakeLlmProvider {
+    return new FakeLlmProvider([], scripts);
   }
 }
 

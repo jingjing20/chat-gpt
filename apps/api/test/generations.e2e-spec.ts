@@ -1,0 +1,228 @@
+import {
+  authResponseSchema,
+  conversationResponseSchema,
+  createGenerationResponseSchema,
+  csrfResponseSchema,
+  generationResponseSchema,
+} from '@chat/contracts';
+import type { INestApplication } from '@nestjs/common';
+import { Test, type TestingModule } from '@nestjs/testing';
+import request from 'supertest';
+import type { App } from 'supertest/types';
+import { randomUUID } from 'node:crypto';
+import { AppModule } from '../src/app.module';
+import { configureApp } from '../src/configure-app';
+import { PrismaService } from '../src/database/prisma.service';
+import { OutboxDispatcherService } from '../src/outbox/outbox-dispatcher.service';
+import { GENERATION_QUEUE } from '../src/outbox/outbox.constants';
+import type { Queue } from 'bullmq';
+import type { GenerationJob } from '@chat/contracts';
+
+type TestAgent = ReturnType<typeof request.agent>;
+
+process.env.NODE_ENV = 'test';
+process.env.DATABASE_URL =
+  process.env.TEST_DATABASE_URL ??
+  'postgresql://chat:chat_local_password@localhost:15432/chat_test?schema=public';
+process.env.REDIS_URL = 'redis://localhost:16379';
+process.env.ACCESS_TOKEN_SECRET =
+  'test-only-access-token-secret-at-least-32-chars';
+process.env.AUTH_COOKIE_SECURE = 'false';
+process.env.AUTH_RATE_LIMIT_MAX = '100';
+process.env.GENERATION_QUEUE_PREFIX = `chat:test:api:${process.pid}`;
+process.env.OUTBOX_DISPATCH_INTERVAL_MS = '60000';
+
+describe('API 阶段 4 Generation（端到端）', () => {
+  let app: INestApplication<App>;
+  let prisma: PrismaService;
+  let dispatcher: OutboxDispatcherService;
+  let queue: Queue<GenerationJob>;
+
+  beforeAll(async () => {
+    if (!new URL(process.env.DATABASE_URL!).pathname.endsWith('/chat_test')) {
+      throw new Error('E2E 测试只能连接 chat_test 数据库');
+    }
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleFixture.createNestApplication();
+    configureApp(app);
+    await app.init();
+    prisma = app.get(PrismaService);
+    dispatcher = app.get(OutboxDispatcherService);
+    queue = app.get(GENERATION_QUEUE);
+  });
+
+  beforeEach(async () => {
+    await queue.obliterate({ force: true });
+    await prisma.outboxEvent.deleteMany();
+    await prisma.message.deleteMany();
+    await prisma.conversationUserState.deleteMany();
+    await prisma.conversation.deleteMany();
+    await prisma.auditLog.deleteMany();
+    await prisma.refreshSession.deleteMany();
+    await prisma.user.deleteMany();
+  });
+
+  it('事务创建消息、占位消息、generation 和 outbox，并立即返回 202', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const csrfToken = await register(agent, 'generation@example.com');
+    const conversationId = await createConversation(agent, csrfToken);
+    const response = await agent
+      .post(`/api/v1/conversations/${conversationId}/generations`)
+      .set('x-csrf-token', csrfToken)
+      .set('Idempotency-Key', randomUUID())
+      .send({
+        content: '解释可靠任务队列',
+        model: 'fake-model',
+        clientMessageId: randomUUID(),
+      })
+      .expect(202);
+    const body = createGenerationResponseSchema.parse(response.body);
+    expect(body.userMessage.status).toBe('COMPLETED');
+    expect(body.assistantMessage).toMatchObject({
+      status: 'PENDING',
+      content: '',
+    });
+    expect(body.generation.status).toBe('QUEUED');
+    expect(await prisma.generation.count()).toBe(1);
+    expect(await prisma.outboxEvent.count()).toBe(1);
+  });
+
+  it('相同幂等键和请求返回原资源，不同请求返回冲突', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const csrfToken = await register(agent, 'idempotency@example.com');
+    const conversationId = await createConversation(agent, csrfToken);
+    const idempotencyKey = randomUUID();
+    const payload = {
+      content: '只创建一次',
+      model: 'fake-model',
+      clientMessageId: randomUUID(),
+    };
+    const first = await agent
+      .post(`/api/v1/conversations/${conversationId}/generations`)
+      .set('x-csrf-token', csrfToken)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(202);
+    const repeated = await agent
+      .post(`/api/v1/conversations/${conversationId}/generations`)
+      .set('x-csrf-token', csrfToken)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(202);
+    expect(
+      createGenerationResponseSchema.parse(repeated.body).generation.id,
+    ).toBe(createGenerationResponseSchema.parse(first.body).generation.id);
+    expect(await prisma.generation.count()).toBe(1);
+    expect(await prisma.message.count()).toBe(2);
+
+    await agent
+      .post(`/api/v1/conversations/${conversationId}/generations`)
+      .set('x-csrf-token', csrfToken)
+      .set('Idempotency-Key', idempotencyKey)
+      .send({ ...payload, content: '不同请求' })
+      .expect(409)
+      .expect(({ body }: { body: Record<string, unknown> }) => {
+        expect(body).toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+      });
+  });
+
+  it('Outbox 可重复投递且固定 Job ID 去重', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const csrfToken = await register(agent, 'outbox@example.com');
+    const conversationId = await createConversation(agent, csrfToken);
+    const created = await agent
+      .post(`/api/v1/conversations/${conversationId}/generations`)
+      .set('x-csrf-token', csrfToken)
+      .set('Idempotency-Key', randomUUID())
+      .send({
+        content: '可靠投递',
+        model: 'fake-model',
+        clientMessageId: randomUUID(),
+      })
+      .expect(202);
+    const generationId = createGenerationResponseSchema.parse(created.body)
+      .generation.id;
+    await prisma.outboxEvent.updateMany({ data: { publishedAt: null } });
+    await dispatcher.dispatchOnce();
+    await prisma.outboxEvent.updateMany({ data: { publishedAt: null } });
+    await dispatcher.dispatchOnce();
+
+    expect(await prisma.outboxEvent.count()).toBe(1);
+    expect(
+      await prisma.outboxEvent
+        .findFirstOrThrow()
+        .then((event) => event.publishedAt),
+    ).not.toBeNull();
+    await expect(queue.getJob(generationId)).resolves.toMatchObject({
+      id: generationId,
+      data: { generationId },
+    });
+  });
+
+  it('查询和取消按用户隔离，重复取消保持幂等', async () => {
+    const owner = request.agent(app.getHttpServer());
+    const stranger = request.agent(app.getHttpServer());
+    const ownerCsrf = await register(owner, 'generation-owner@example.com');
+    const strangerCsrf = await register(
+      stranger,
+      'generation-stranger@example.com',
+    );
+    const conversationId = await createConversation(owner, ownerCsrf);
+    const created = await owner
+      .post(`/api/v1/conversations/${conversationId}/generations`)
+      .set('x-csrf-token', ownerCsrf)
+      .set('Idempotency-Key', randomUUID())
+      .send({
+        content: '稍后取消',
+        model: 'fake-model',
+        clientMessageId: randomUUID(),
+      })
+      .expect(202);
+    const generationId = createGenerationResponseSchema.parse(created.body)
+      .generation.id;
+
+    await stranger.get(`/api/v1/generations/${generationId}`).expect(404);
+    await stranger
+      .post(`/api/v1/generations/${generationId}/cancel`)
+      .set('x-csrf-token', strangerCsrf)
+      .expect(404);
+    for (let index = 0; index < 2; index += 1) {
+      const response = await owner
+        .post(`/api/v1/generations/${generationId}/cancel`)
+        .set('x-csrf-token', ownerCsrf)
+        .expect(200);
+      expect(generationResponseSchema.parse(response.body).status).toBe(
+        'CANCEL_REQUESTED',
+      );
+    }
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+});
+
+async function register(agent: TestAgent, email: string): Promise<string> {
+  const csrf = await agent.get('/api/v1/auth/csrf').expect(200);
+  const { csrfToken } = csrfResponseSchema.parse(csrf.body);
+  const response = await agent
+    .post('/api/v1/auth/register')
+    .set('x-csrf-token', csrfToken)
+    .send({ email, password: 'a-secure-password' })
+    .expect(201);
+  return authResponseSchema.parse(response.body).csrfToken;
+}
+
+async function createConversation(
+  agent: TestAgent,
+  csrfToken: string,
+): Promise<string> {
+  const response = await agent
+    .post('/api/v1/conversations')
+    .set('x-csrf-token', csrfToken)
+    .send({ title: '阶段 4 测试' })
+    .expect(201);
+  return conversationResponseSchema.parse(response.body).id;
+}

@@ -23,6 +23,7 @@ process.env.ACCESS_TOKEN_SECRET =
   'test-only-access-token-secret-at-least-32-chars';
 process.env.AUTH_COOKIE_SECURE = 'false';
 process.env.AUTH_RATE_LIMIT_MAX = '100';
+process.env.GENERATION_QUEUE_PREFIX = `chat:test:api:${process.pid}`;
 
 describe('API 阶段 2 对话与消息（端到端）', () => {
   let app: INestApplication<App>;
@@ -42,6 +43,7 @@ describe('API 阶段 2 对话与消息（端到端）', () => {
   });
 
   beforeEach(async () => {
+    await prisma.outboxEvent.deleteMany();
     await prisma.message.deleteMany();
     await prisma.conversationUserState.deleteMany();
     await prisma.conversation.deleteMany();

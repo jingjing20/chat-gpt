@@ -23,6 +23,15 @@ export const apiEnvSchema = infrastructureSchema.extend({
     .transform((value) => value === 'true'),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
   AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(1).default(60),
+  LLM_PROVIDER: z.string().trim().min(1).default('deepseek'),
+  OUTBOX_DISPATCH_INTERVAL_MS: z.coerce.number().int().min(50).default(500),
+  OUTBOX_DISPATCH_BATCH_SIZE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(20),
+  GENERATION_QUEUE_PREFIX: z.string().trim().min(1).default('chat:dev:queue'),
 });
 
 export const workerEnvSchema = infrastructureSchema
@@ -41,6 +50,15 @@ export const workerEnvSchema = infrastructureSchema
     LLM_REASONING_EFFORT: z.enum(['low', 'medium', 'high']).default('high'),
     LLM_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1).default(600_000),
     LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1).default(8192),
+    LLM_USER_HASH_SECRET: z
+      .string()
+      .min(32)
+      .default('development-only-user-hash-secret'),
+    GENERATION_QUEUE_PREFIX: z.string().trim().min(1).default('chat:dev:queue'),
+    GENERATION_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(4),
+    GENERATION_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
+    GENERATION_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(0).default(250),
+    GENERATION_CANCEL_POLL_MS: z.coerce.number().int().min(25).default(200),
   })
   .superRefine((environment, context) => {
     if (environment.NODE_ENV === 'production' && !environment.LLM_API_KEY) {
@@ -48,6 +66,16 @@ export const workerEnvSchema = infrastructureSchema
         code: 'custom',
         path: ['LLM_API_KEY'],
         message: '生产环境必须配置 LLM_API_KEY',
+      });
+    }
+    if (
+      environment.NODE_ENV === 'production' &&
+      environment.LLM_USER_HASH_SECRET === 'development-only-user-hash-secret'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LLM_USER_HASH_SECRET'],
+        message: '生产环境必须配置独立的 LLM_USER_HASH_SECRET',
       });
     }
   });
@@ -72,4 +100,28 @@ export function readWorkerEnv(environment: NodeJS.ProcessEnv): WorkerEnv {
 
 export function readWebEnv(environment: NodeJS.ProcessEnv): WebEnv {
   return webEnvSchema.parse(environment);
+}
+
+export function redisConnectionOptions(redisUrl: string): {
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  db?: number;
+  tls?: Record<string, never>;
+} {
+  const parsed = new URL(redisUrl);
+  const database = parsed.pathname.slice(1);
+  return {
+    host: parsed.hostname,
+    port: Number(parsed.port || 6379),
+    ...(parsed.username
+      ? { username: decodeURIComponent(parsed.username) }
+      : {}),
+    ...(parsed.password
+      ? { password: decodeURIComponent(parsed.password) }
+      : {}),
+    ...(database ? { db: Number(database) } : {}),
+    ...(parsed.protocol === 'rediss:' ? { tls: {} } : {}),
+  };
 }

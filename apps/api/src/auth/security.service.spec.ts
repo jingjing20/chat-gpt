@@ -15,6 +15,7 @@ describe('SecurityService', () => {
     AUTH_RATE_LIMIT_MAX: 10,
     AUTH_RATE_LIMIT_WINDOW_SECONDS: 60,
     LLM_PROVIDER: 'deepseek',
+    LLM_DEFAULT_MODEL: 'configured-test-model',
     OUTBOX_DISPATCH_INTERVAL_MS: 500,
     OUTBOX_DISPATCH_BATCH_SIZE: 20,
     GENERATION_QUEUE_PREFIX: 'chat:test:queue',

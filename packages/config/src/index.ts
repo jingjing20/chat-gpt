@@ -24,6 +24,7 @@ export const apiEnvSchema = infrastructureSchema.extend({
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
   AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(1).default(60),
   LLM_PROVIDER: z.string().trim().min(1).default('deepseek'),
+  LLM_DEFAULT_MODEL: z.string().trim().min(1).default('deepseek-v4-flash'),
   OUTBOX_DISPATCH_INTERVAL_MS: z.coerce.number().int().min(50).default(500),
   OUTBOX_DISPATCH_BATCH_SIZE: z.coerce
     .number()

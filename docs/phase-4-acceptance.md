@@ -58,7 +58,7 @@ curl -i -X POST \
   -H 'Idempotency-Key: 7d65a111-65cc-4ee4-b099-8e54c70b82b2' \
   -H 'x-csrf-token: <csrf-token>' \
   -b cookies.txt \
-  -d '{"content":"解释可靠任务队列","model":"deepseek-v4-flash","clientMessageId":"98cb7843-1580-4449-8735-c14476b85f2d"}' \
+  -d '{"content":"解释可靠任务队列","clientMessageId":"98cb7843-1580-4449-8735-c14476b85f2d"}' \
   http://localhost:3001/api/v1/conversations/<conversation-id>/generations
 ```
 

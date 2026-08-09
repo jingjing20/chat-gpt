@@ -132,7 +132,6 @@ export async function createGeneration(
       headers: { 'Idempotency-Key': crypto.randomUUID() },
       body: JSON.stringify({
         content,
-        model: 'deepseek-v4-flash',
         clientMessageId: crypto.randomUUID(),
       }),
     }),

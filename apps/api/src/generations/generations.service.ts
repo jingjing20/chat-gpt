@@ -92,7 +92,7 @@ export class GenerationsService {
             requestMessageId: userMessage.id,
             responseMessageId: assistantMessage.id,
             provider: this.environment.LLM_PROVIDER,
-            model: request.model,
+            model: this.environment.LLM_DEFAULT_MODEL,
             idempotencyKey,
             requestHash,
           },
@@ -200,7 +200,6 @@ export class GenerationsService {
           conversationId,
           clientMessageId: request.clientMessageId,
           content: request.content,
-          model: request.model,
         }),
       )
       .digest('hex');

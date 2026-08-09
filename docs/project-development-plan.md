@@ -777,10 +777,11 @@ Content-Type: application/json
 ```json
 {
   "content": "请解释 Redis Streams",
-  "model": "deepseek-v4-flash",
   "clientMessageId": "uuid"
 }
 ```
+
+Generation 使用 API 进程从 `LLM_DEFAULT_MODEL` 读取的模型，客户端不得覆盖。
 
 返回 `202 Accepted`：
 

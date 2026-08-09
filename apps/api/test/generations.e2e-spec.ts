@@ -29,6 +29,7 @@ process.env.ACCESS_TOKEN_SECRET =
   'test-only-access-token-secret-at-least-32-chars';
 process.env.AUTH_COOKIE_SECURE = 'false';
 process.env.AUTH_RATE_LIMIT_MAX = '100';
+process.env.LLM_DEFAULT_MODEL = 'configured-test-model';
 process.env.GENERATION_QUEUE_PREFIX = `chat:test:api:${process.pid}`;
 process.env.OUTBOX_DISPATCH_INTERVAL_MS = '60000';
 
@@ -74,7 +75,7 @@ describe('API 阶段 4 Generation（端到端）', () => {
       .set('Idempotency-Key', randomUUID())
       .send({
         content: '解释可靠任务队列',
-        model: 'fake-model',
+        model: 'client-must-not-override-config',
         clientMessageId: randomUUID(),
       })
       .expect(202);
@@ -85,6 +86,7 @@ describe('API 阶段 4 Generation（端到端）', () => {
       content: '',
     });
     expect(body.generation.status).toBe('QUEUED');
+    expect(body.generation.model).toBe('configured-test-model');
     expect(await prisma.generation.count()).toBe(1);
     expect(await prisma.outboxEvent.count()).toBe(1);
   });
@@ -96,7 +98,6 @@ describe('API 阶段 4 Generation（端到端）', () => {
     const idempotencyKey = randomUUID();
     const payload = {
       content: '只创建一次',
-      model: 'fake-model',
       clientMessageId: randomUUID(),
     };
     const first = await agent
@@ -138,7 +139,6 @@ describe('API 阶段 4 Generation（端到端）', () => {
       .set('Idempotency-Key', randomUUID())
       .send({
         content: '可靠投递',
-        model: 'fake-model',
         clientMessageId: randomUUID(),
       })
       .expect(202);
@@ -176,7 +176,6 @@ describe('API 阶段 4 Generation（端到端）', () => {
       .set('Idempotency-Key', randomUUID())
       .send({
         content: '稍后取消',
-        model: 'fake-model',
         clientMessageId: randomUUID(),
       })
       .expect(202);
@@ -212,7 +211,6 @@ describe('API 阶段 4 Generation（端到端）', () => {
         .set('Idempotency-Key', randomUUID())
         .send({
           content,
-          model: 'fake-model',
           clientMessageId: randomUUID(),
         });
 

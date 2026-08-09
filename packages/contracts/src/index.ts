@@ -155,7 +155,6 @@ export type GenerationStatus = z.infer<typeof generationStatusSchema>;
 
 export const createGenerationRequestSchema = z.object({
   content: z.string().trim().min(1).max(20_000),
-  model: z.string().trim().min(1).max(100),
   clientMessageId: z.string().uuid(),
 });
 

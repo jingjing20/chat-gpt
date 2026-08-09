@@ -1,13 +1,11 @@
 'use client';
 
 import {
-  archiveConversation,
   cancelGeneration,
   createGeneration,
   getConversation,
   listMessages,
   markConversationRead,
-  renameConversation,
   saveScrollPosition,
 } from '@/lib/chat-api';
 import { ApiClientError } from '@/lib/api';
@@ -18,9 +16,9 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, type FormEvent } from 'react';
 import { SafeMarkdown } from './safe-markdown';
+import { ReasoningPanel } from './reasoning-panel';
 import {
   isGenerationActive,
   selectConversationGenerations,
@@ -33,7 +31,6 @@ export function ConversationView({
 }: {
   conversationId: string;
 }) {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const viewportRef = useRef<HTMLDivElement>(null);
   const restoredConversationRef = useRef<string | null>(null);
@@ -138,28 +135,6 @@ export function ConversationView({
       }
     },
   });
-  const archiveMutation = useMutation({
-    mutationFn: () => archiveConversation(conversationId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.all,
-      });
-      router.replace('/chat');
-    },
-  });
-  const renameMutation = useMutation({
-    mutationFn: (title: string) => renameConversation(conversationId, title),
-    onSuccess: async (conversation) => {
-      queryClient.setQueryData(
-        queryKeys.conversations.detail(conversationId),
-        conversation,
-      );
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.all,
-      });
-    },
-  });
-
   useEffect(() => {
     void markConversationRead(conversationId).then((conversation) => {
       queryClient.setQueryData(
@@ -216,11 +191,6 @@ export function ConversationView({
     if (message) sendMutation.mutate(message);
   }
 
-  function promptForTitle() {
-    const title = window.prompt('输入新的对话名称', detailQuery.data?.title);
-    if (title?.trim()) renameMutation.mutate(title.trim());
-  }
-
   if (detailQuery.isPending || messagesQuery.isPending) {
     return <div className="centered-state">正在载入对话…</div>;
   }
@@ -234,23 +204,6 @@ export function ConversationView({
         <div>
           <p>持久化对话</p>
           <h1>{detailQuery.data.title}</h1>
-        </div>
-        <div className="header-actions">
-          <button
-            className="text-button"
-            onClick={promptForTitle}
-            type="button"
-          >
-            重命名
-          </button>
-          <button
-            className="text-button danger"
-            disabled={archiveMutation.isPending}
-            onClick={() => archiveMutation.mutate()}
-            type="button"
-          >
-            归档
-          </button>
         </div>
       </header>
       <div
@@ -283,41 +236,46 @@ export function ConversationView({
                 <div className="message-role">
                   {message.role === 'USER' ? '你' : 'Assistant'}
                 </div>
-                {message.reasoningContent ? (
-                  <details className="reasoning-block">
-                    <summary>推理过程</summary>
-                    <SafeMarkdown content={message.reasoningContent} />
-                  </details>
-                ) : null}
-                <SafeMarkdown content={message.content} />
-                {message.status === 'QUEUED' ||
-                message.status === 'PENDING' ||
-                message.status === 'STARTING' ||
-                message.status === 'STREAMING' ? (
-                  <span className="streaming-indicator">
-                    {message.status === 'PENDING' || message.status === 'QUEUED'
-                      ? '排队中…'
-                      : '生成中…'}
-                  </span>
-                ) : null}
-                {'generationId' in message &&
-                typeof message.generationId === 'string' &&
-                (message.status === 'QUEUED' ||
+                <div className="message-content">
+                  {message.reasoningContent ? (
+                    <ReasoningPanel
+                      content={message.reasoningContent}
+                      status={message.status}
+                    />
+                  ) : null}
+                  <SafeMarkdown content={message.content} />
+                  {message.status === 'QUEUED' ||
+                  message.status === 'PENDING' ||
                   message.status === 'STARTING' ||
-                  message.status === 'STREAMING' ||
-                  message.status === 'CANCEL_REQUESTED') ? (
-                  <button
-                    className="stop-generation"
-                    disabled={
-                      cancelMutation.isPending &&
-                      cancelMutation.variables === message.generationId
-                    }
-                    onClick={() => cancelMutation.mutate(message.generationId)}
-                    type="button"
-                  >
-                    停止这项生成
-                  </button>
-                ) : null}
+                  message.status === 'STREAMING' ? (
+                    <span className="streaming-indicator">
+                      {message.status === 'PENDING' ||
+                      message.status === 'QUEUED'
+                        ? '排队中…'
+                        : '生成中…'}
+                    </span>
+                  ) : null}
+                  {'generationId' in message &&
+                  typeof message.generationId === 'string' &&
+                  (message.status === 'QUEUED' ||
+                    message.status === 'STARTING' ||
+                    message.status === 'STREAMING' ||
+                    message.status === 'CANCEL_REQUESTED') ? (
+                    <button
+                      className="stop-generation"
+                      disabled={
+                        cancelMutation.isPending &&
+                        cancelMutation.variables === message.generationId
+                      }
+                      onClick={() =>
+                        cancelMutation.mutate(message.generationId)
+                      }
+                      type="button"
+                    >
+                      停止这项生成
+                    </button>
+                  ) : null}
+                </div>
               </article>
             ))}
           </div>

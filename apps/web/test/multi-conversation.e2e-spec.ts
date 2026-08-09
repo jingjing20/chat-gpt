@@ -92,8 +92,10 @@ async function createNamedConversation(
       url.toString() !== previousUrl,
   );
   const conversationId = page.url().split('/').at(-1)!;
-  page.once('dialog', async (dialog) => dialog.accept(title));
-  await page.getByRole('button', { name: '重命名' }).click();
+  await page.getByRole('button', { name: '操作对话：新对话' }).click();
+  await page.getByRole('menuitem', { name: '重命名' }).click();
+  await page.getByRole('textbox', { name: '对话名称' }).fill(title);
+  await page.getByRole('button', { name: '保存' }).click();
   await expect(page.getByRole('heading', { name: title })).toBeVisible();
   return conversationId;
 }

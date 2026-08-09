@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const webPort = process.env.E2E_WEB_PORT ?? '3000';
 const apiPort = process.env.E2E_API_PORT ?? '3001';
+const workerPort = process.env.E2E_WORKER_PORT ?? '3002';
 const webBaseUrl = `http://127.0.0.1:${webPort}`;
 const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
 const webCommand = process.env.E2E_WEB_COMMAND ?? `pnpm dev --port ${webPort}`;
@@ -41,7 +42,7 @@ export default defineConfig({
     },
     {
       command: 'pnpm --dir ../worker start',
-      url: 'http://127.0.0.1:3002/health/live',
+      url: `http://127.0.0.1:${workerPort}/health/live`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
@@ -51,7 +52,7 @@ export default defineConfig({
           'postgresql://chat:chat_local_password@localhost:15432/chat_test?schema=public',
         REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:16379',
         LLM_USER_HASH_SECRET: 'test-worker-user-hash-secret-at-least-32-chars',
-        WORKER_HEALTH_PORT: '3002',
+        WORKER_HEALTH_PORT: workerPort,
       },
     },
     {

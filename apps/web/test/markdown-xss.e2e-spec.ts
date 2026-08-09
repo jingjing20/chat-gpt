@@ -19,9 +19,14 @@ test('恶意 Markdown 不能执行，刷新后对话和消息仍然存在', asyn
   await page.getByRole('button', { name: '发送消息' }).click();
 
   await expect(page.getByText('安全文本')).toBeVisible();
-  await page.getByText('推理过程').click();
+  const activeReasoning = page.getByRole('button', { name: '正在思考' });
+  await expect(activeReasoning).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByText('安全分析')).toBeVisible();
   await expect(page.getByText(/这是实时流式回复/)).toBeVisible();
+  const completedReasoning = page.getByRole('button', { name: '推理过程' });
+  await expect(completedReasoning).toHaveAttribute('aria-expanded', 'false');
+  await completedReasoning.click();
+  await expect(page.getByText('安全分析')).toBeVisible();
   expect(
     await page.locator('script').filter({ hasText: '__xssExecuted' }).count(),
   ).toBe(0);

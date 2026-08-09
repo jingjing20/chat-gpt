@@ -9,13 +9,13 @@
     "prisma"
   ],
   "scripts": {
-    "build": "prisma generate && tsc -p tsconfig.build.json",
-    "db:generate": "prisma generate",
-    "db:migrate:deploy": "prisma migrate deploy",
-    "db:migrate:dev": "prisma migrate dev",
-    "db:test:prepare": "prisma migrate deploy",
+    "build": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js generate && tsc -p tsconfig.build.json",
+    "db:generate": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js generate",
+    "db:migrate:deploy": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js migrate deploy",
+    "db:migrate:dev": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js migrate dev",
+    "db:test:prepare": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js migrate deploy",
     "format": "prisma format",
-    "typecheck": "prisma generate && tsc --noEmit -p tsconfig.json"
+    "typecheck": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js generate && tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@prisma/client": "6.19.3"

@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  createConversation,
+  conversationTimestamp,
   getCurrentUser,
   listConversations,
   logout,
@@ -13,6 +13,30 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import { useGenerationStore } from '@/lib/generation-store';
 import { ConversationNavLink } from './conversation-nav-link';
+import { MessageSquarePlus } from 'lucide-react';
+import type { ConversationResponse } from '@chat/contracts';
+
+function conversationGroup(dateValue: string) {
+  const now = new Date();
+  const date = new Date(dateValue);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const days = Math.floor((today.getTime() - target.getTime()) / 86_400_000);
+  if (days <= 0) return '今天';
+  if (days === 1) return '昨天';
+  if (days < 7) return '7 天内';
+  if (days < 30) return '30 天内';
+  return '更早';
+}
+
+function groupConversations(conversations: ConversationResponse[]) {
+  const groups = new Map<string, ConversationResponse[]>();
+  for (const conversation of conversations) {
+    const label = conversationGroup(conversationTimestamp(conversation));
+    groups.set(label, [...(groups.get(label) ?? []), conversation]);
+  }
+  return [...groups.entries()];
+}
 
 export function ChatShell({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -27,15 +51,6 @@ export function ChatShell({ children }: { children: ReactNode }) {
     queryKey: queryKeys.conversations.list(false),
     queryFn: () => listConversations(false),
     enabled: userQuery.isSuccess,
-  });
-  const createMutation = useMutation({
-    mutationFn: () => createConversation(),
-    onSuccess: async (conversation) => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.all,
-      });
-      router.push(`/chat/${conversation.id}`);
-    },
   });
   const logoutMutation = useMutation({
     mutationFn: logout,
@@ -63,28 +78,33 @@ export function ChatShell({ children }: { children: ReactNode }) {
             <span className="brand-orb" aria-hidden="true" />
             Concurrent
           </Link>
-          <button
-            aria-label="新建对话"
-            className="icon-button"
-            disabled={createMutation.isPending}
-            onClick={() => createMutation.mutate()}
-            type="button"
-          >
-            ＋
-          </button>
         </div>
+        <button
+          className="new-conversation-button"
+          onClick={() => router.push('/chat')}
+          type="button"
+        >
+          <MessageSquarePlus aria-hidden="true" size={16} />
+          新建对话
+        </button>
         <nav className="conversation-nav" aria-label="对话列表">
-          <p className="nav-label">最近对话</p>
-          {conversationsQuery.data?.items.map((conversation) => (
-            <ConversationNavLink
-              conversation={conversation}
-              isActive={params.conversationId === conversation.id}
-              key={conversation.id}
-            />
-          ))}
+          {groupConversations(conversationsQuery.data?.items ?? []).map(
+            ([label, conversations]) => (
+              <section className="conversation-group" key={label}>
+                <p className="nav-label">{label}</p>
+                {conversations.map((conversation) => (
+                  <ConversationNavLink
+                    conversation={conversation}
+                    isActive={params.conversationId === conversation.id}
+                    key={conversation.id}
+                  />
+                ))}
+              </section>
+            ),
+          )}
           {conversationsQuery.isSuccess &&
           conversationsQuery.data.items.length === 0 ? (
-            <p className="empty-nav">还没有对话，点击右上角开始。</p>
+            <p className="empty-nav">还没有对话，从首页输入一个问题开始。</p>
           ) : null}
         </nav>
         <div className="account-row">

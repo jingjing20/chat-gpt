@@ -8,8 +8,6 @@ test('恶意 Markdown 不能执行，刷新后对话和消息仍然存在', asyn
   await page.getByLabel('密码').fill('a-secure-password');
   await page.getByRole('button', { name: '注册并开始' }).click();
   await expect(page).toHaveURL(/\/chat$/);
-  await page.getByRole('button', { name: '新建对话' }).click();
-  await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/i);
 
   const payload =
     '**安全文本** <script>globalThis.__xssExecuted=true</script> ' +
@@ -17,6 +15,7 @@ test('恶意 Markdown 不能执行，刷新后对话和消息仍然存在', asyn
     '[危险链接](javascript:globalThis.__xssExecuted=true)';
   await page.getByRole('textbox', { name: '消息内容' }).fill(payload);
   await page.getByRole('button', { name: '发送消息' }).click();
+  await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/i);
 
   await expect(page.getByText('安全文本')).toBeVisible();
   const activeReasoning = page.getByRole('button', { name: '正在思考' });

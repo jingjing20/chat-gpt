@@ -16,7 +16,13 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, type FormEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type FormEvent,
+} from 'react';
 import { SafeMarkdown } from './safe-markdown';
 import { ReasoningPanel } from './reasoning-panel';
 import {
@@ -25,6 +31,8 @@ import {
   useGenerationStore,
 } from '@/lib/generation-store';
 import { useShallow } from 'zustand/react/shallow';
+import { ArrowUp, Square } from 'lucide-react';
+import { AnswerActions } from './answer-actions';
 
 export function ConversationView({
   conversationId,
@@ -33,6 +41,7 @@ export function ConversationView({
 }) {
   const queryClient = useQueryClient();
   const viewportRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const restoredConversationRef = useRef<string | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const content = useGenerationStore(
@@ -44,6 +53,12 @@ export function ConversationView({
   const activeOverlays = overlays.filter((generation) =>
     isGenerationActive(generation.status),
   );
+  const streamingSignature = activeOverlays
+    .map(
+      (generation) =>
+        `${generation.generationId}:${generation.content.length}:${generation.reasoningContent.length}:${generation.status}`,
+    )
+    .join('|');
   const terminalSignature = overlays
     .filter((generation) => !isGenerationActive(generation.status))
     .map((generation) => `${generation.generationId}:${generation.status}`)
@@ -135,6 +150,13 @@ export function ConversationView({
       }
     },
   });
+  const composerStatus = activeOverlays.some(
+    (generation) => generation.status === 'QUEUED',
+  )
+    ? '任务已进入队列，切换对话不会中断。'
+    : activeOverlays.length > 0
+      ? `此对话有 ${activeOverlays.length} 项任务正在运行。`
+      : sendMutationErrorMessage();
   useEffect(() => {
     void markConversationRead(conversationId).then((conversation) => {
       queryClient.setQueryData(
@@ -160,6 +182,19 @@ export function ConversationView({
     restoredConversationRef.current = conversationId;
     viewport.scrollTop = detailQuery.data.scrollOffset;
   }, [conversationId, detailQuery.data, messagesQuery.isPending]);
+
+  useLayoutEffect(() => {
+    if (!streamingSignature) return;
+    const viewport = viewportRef.current;
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+  }, [messages.length, streamingSignature]);
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
+  }, [content]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -191,6 +226,13 @@ export function ConversationView({
     if (message) sendMutation.mutate(message);
   }
 
+  function sendMutationErrorMessage() {
+    return sendMutation.error instanceof ApiClientError &&
+      sendMutation.error.code === 'USER_CONCURRENCY_LIMIT'
+      ? sendMutation.error.message
+      : null;
+  }
+
   if (detailQuery.isPending || messagesQuery.isPending) {
     return <div className="centered-state">正在载入对话…</div>;
   }
@@ -201,10 +243,11 @@ export function ConversationView({
   return (
     <div className="conversation-view">
       <header className="conversation-header">
-        <div>
-          <p>持久化对话</p>
-          <h1>{detailQuery.data.title}</h1>
-        </div>
+        <h1>{detailQuery.data.title}</h1>
+        <span className="conversation-mode">
+          <i aria-hidden="true" />
+          DeepSeek
+        </span>
       </header>
       <div
         className="message-viewport"
@@ -230,12 +273,10 @@ export function ConversationView({
           <div className="message-list">
             {messages.map((message) => (
               <article
+                aria-label={message.role === 'USER' ? '你的消息' : '助手回答'}
                 className={`message ${message.role.toLowerCase()}`}
                 key={message.id}
               >
-                <div className="message-role">
-                  {message.role === 'USER' ? '你' : 'Assistant'}
-                </div>
                 <div className="message-content">
                   {message.reasoningContent ? (
                     <ReasoningPanel
@@ -272,8 +313,14 @@ export function ConversationView({
                       }
                       type="button"
                     >
-                      停止这项生成
+                      <Square aria-hidden="true" size={10} />
+                      停止生成
                     </button>
+                  ) : null}
+                  {message.role === 'ASSISTANT' &&
+                  message.status === 'COMPLETED' &&
+                  message.content ? (
+                    <AnswerActions content={message.content} />
                   ) : null}
                 </div>
               </article>
@@ -282,41 +329,40 @@ export function ConversationView({
         )}
       </div>
       <form className="composer" onSubmit={submit}>
-        <div className="composer-status" aria-live="polite">
-          {activeOverlays.some((generation) => generation.status === 'QUEUED')
-            ? '任务已进入队列，切换对话不会中断。'
-            : activeOverlays.length > 0
-              ? `此对话有 ${activeOverlays.length} 项任务正在运行。`
-              : sendMutation.error instanceof ApiClientError &&
-                  sendMutation.error.code === 'USER_CONCURRENCY_LIMIT'
-                ? sendMutation.error.message
-                : null}
-        </div>
-        <textarea
-          aria-label="消息内容"
-          maxLength={20_000}
-          onChange={(event) =>
-            useGenerationStore
-              .getState()
-              .setDraft(conversationId, event.target.value)
-          }
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
+        {composerStatus ? (
+          <div className="composer-status" aria-live="polite">
+            {composerStatus}
+          </div>
+        ) : null}
+        <div className="composer-panel">
+          <textarea
+            aria-label="消息内容"
+            maxLength={20_000}
+            onChange={(event) =>
+              useGenerationStore
+                .getState()
+                .setDraft(conversationId, event.target.value)
             }
-          }}
-          placeholder="输入消息，Enter 发送，Shift + Enter 换行"
-          rows={1}
-          value={content}
-        />
-        <button
-          aria-label="发送消息"
-          disabled={sendMutation.isPending || !content.trim()}
-          type="submit"
-        >
-          ↑
-        </button>
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder="给助手发送消息"
+            ref={textareaRef}
+            rows={1}
+            value={content}
+          />
+          <button
+            aria-label="发送消息"
+            disabled={sendMutation.isPending || !content.trim()}
+            type="submit"
+          >
+            <ArrowUp aria-hidden="true" size={19} />
+          </button>
+          <p>Enter 发送 · Shift + Enter 换行</p>
+        </div>
       </form>
     </div>
   );

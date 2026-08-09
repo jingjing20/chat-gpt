@@ -36,12 +36,6 @@ export function ConversationNavLink({
             <i aria-label="有未读回答" className="unread-dot" />
           ) : null}
         </span>
-        <time dateTime={conversation.updatedAt}>
-          {new Intl.DateTimeFormat('zh-CN', {
-            month: 'numeric',
-            day: 'numeric',
-          }).format(new Date(conversation.updatedAt))}
-        </time>
       </Link>
       <ConversationActions conversation={conversation} isActive={isActive} />
     </div>

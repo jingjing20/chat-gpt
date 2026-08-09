@@ -17,3 +17,19 @@ test('Markdown 渲染不会输出原始 HTML、脚本或危险链接', () => {
   assert.match(html, /<strong>安全文本<\/strong>/);
   assert.doesNotMatch(html, /<script|<img|onerror|javascript:/i);
 });
+
+test('支持 GFM 表格、代码高亮和 Mermaid 代码块', () => {
+  const html = renderToStaticMarkup(
+    <SafeMarkdown
+      content={
+        '| 功能 | 状态 |\n| --- | --- |\n| Markdown | ✅ |\n\n' +
+        '```ts\nconst answer = 42;\n```\n\n' +
+        '```mermaid\ngraph TD\n  A --> B\n```'
+      }
+    />,
+  );
+
+  assert.match(html, /<table>/);
+  assert.match(html, /class="hljs-keyword"/);
+  assert.match(html, /正在绘制流程图/);
+});

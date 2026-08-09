@@ -86,6 +86,9 @@ async function createNamedConversation(
 ) {
   const previousUrl = page.url();
   await page.getByRole('button', { name: '新建对话' }).click();
+  await expect(page).toHaveURL(/\/chat$/);
+  await page.getByRole('textbox', { name: '消息内容' }).fill(`创建 ${title}`);
+  await page.getByRole('button', { name: '发送消息' }).click();
   await page.waitForURL(
     (url) =>
       /\/chat\/[0-9a-f-]{36}$/i.test(url.pathname) &&

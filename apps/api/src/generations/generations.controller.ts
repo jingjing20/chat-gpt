@@ -48,6 +48,17 @@ export class GenerationsController {
     return this.generations.get(request.auth!.userId, this.id(generationId));
   }
 
+  @Get('generations/:generationId/attempts')
+  attempts(
+    @Req() request: Request,
+    @Param('generationId') generationId: string,
+  ) {
+    return this.generations.attempts(
+      request.auth!.userId,
+      this.id(generationId),
+    );
+  }
+
   @Post('generations/:generationId/cancel')
   @HttpCode(HttpStatus.OK)
   cancel(@Req() request: Request, @Param('generationId') generationId: string) {

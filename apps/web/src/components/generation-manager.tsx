@@ -50,6 +50,7 @@ export function GenerationManager({ userId }: { userId: string }) {
     };
 
     const connect = async (): Promise<void> => {
+      useGenerationStore.getState().setConnectionStatus('connecting');
       const cursorKey = `chat.eventCursor.${userId}`;
       try {
         if (!initialized) {
@@ -79,6 +80,7 @@ export function GenerationManager({ userId }: { userId: string }) {
           },
         );
         if (!response.ok || !response.body) throw new Error('事件连接失败');
+        useGenerationStore.getState().setConnectionStatus('connected');
         retry = 0;
         const parser = new SseParser();
         const decoder = new TextDecoder();
@@ -114,6 +116,7 @@ export function GenerationManager({ userId }: { userId: string }) {
         if (!controller.signal.aborted) throw new Error('事件连接已断开');
       } catch {
         if (controller.signal.aborted) return;
+        useGenerationStore.getState().setConnectionStatus('disconnected');
         const base = Math.min(15_000, 1_000 * 2 ** retry++);
         const delay = Math.round(base * (0.8 + Math.random() * 0.4));
         timer = setTimeout(() => void connect(), delay);

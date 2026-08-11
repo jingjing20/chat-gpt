@@ -35,10 +35,14 @@ export class OutboxDispatcherService
 
   onApplicationBootstrap(): void {
     this.timer = setInterval(() => {
-      void this.dispatchOnce();
+      void this.dispatchOnce().catch(() => {
+        this.logger.warn('Outbox Dispatcher 暂时不可用，将在下一周期恢复');
+      });
     }, this.environment.OUTBOX_DISPATCH_INTERVAL_MS);
     this.timer.unref();
-    void this.dispatchOnce();
+    void this.dispatchOnce().catch(() => {
+      this.logger.warn('Outbox 初次投递失败，将在下一周期恢复');
+    });
   }
 
   async onApplicationShutdown(): Promise<void> {
@@ -79,7 +83,8 @@ export class OutboxDispatcherService
           try {
             await this.queue.add('generate', parsed.data, {
               jobId: parsed.data.generationId,
-              attempts: 1,
+              attempts: 5,
+              backoff: { type: 'exponential', delay: 500 },
               removeOnComplete: false,
               removeOnFail: false,
             });

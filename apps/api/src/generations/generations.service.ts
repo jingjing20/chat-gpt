@@ -2,6 +2,7 @@ import type {
   CreateGenerationRequest,
   CreateGenerationResponse,
   GenerationResponse,
+  GenerationAttemptListResponse,
   MessageResponse,
 } from '@chat/contracts';
 import {
@@ -160,6 +161,35 @@ export class GenerationsService {
       },
     });
     return this.get(userId, generationId);
+  }
+
+  async attempts(
+    userId: string,
+    generationId: string,
+  ): Promise<GenerationAttemptListResponse> {
+    const generation = await this.prisma.generation.findFirst({
+      where: { id: generationId, userId },
+      select: {
+        id: true,
+        attempts: { orderBy: { attemptNo: 'asc' } },
+      },
+    });
+    if (!generation) this.notFound('Generation 不存在');
+    return {
+      generationId: generation.id,
+      attempts: generation.attempts.map((attempt) => ({
+        id: attempt.id,
+        generationId: attempt.generationId,
+        attemptNo: attempt.attemptNo,
+        status: attempt.status,
+        providerRequestId: attempt.providerRequestId,
+        receivedFirstDelta: attempt.receivedFirstDelta,
+        httpStatus: attempt.httpStatus,
+        errorCode: attempt.errorCode,
+        startedAt: attempt.startedAt.toISOString(),
+        endedAt: attempt.endedAt?.toISOString() ?? null,
+      })),
+    };
   }
 
   private async findByIdempotencyKey(userId: string, idempotencyKey: string) {

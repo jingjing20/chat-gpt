@@ -22,6 +22,7 @@ import { eventKeys } from './event-keys';
 @Injectable()
 export class EventsService implements OnApplicationShutdown {
   private readonly redis: Redis;
+  private readonly connections = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -36,6 +37,15 @@ export class EventsService implements OnApplicationShutdown {
     request: Request,
     response: Response,
   ): Promise<void> {
+    const connectionCount = this.connections.get(userId) ?? 0;
+    if (connectionCount >= this.environment.SSE_MAX_CONNECTIONS_PER_USER) {
+      throw new ApiException(
+        'SSE_CONNECTION_LIMIT',
+        '实时连接数已达上限，请关闭其他页面后重试',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    this.connections.set(userId, connectionCount + 1);
     response.status(200);
     response.set({
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -63,7 +73,10 @@ export class EventsService implements OnApplicationShutdown {
           cursor,
         );
         if (!result) {
-          response.write(`: heartbeat ${Math.floor(Date.now() / 1000)}\n\n`);
+          await this.writeWithBackpressure(
+            response,
+            `: heartbeat ${Math.floor(Date.now() / 1000)}\n\n`,
+          );
           continue;
         }
         for (const [, entries] of result) {
@@ -74,7 +87,8 @@ export class EventsService implements OnApplicationShutdown {
               ...JSON.parse(raw),
               streamId,
             });
-            response.write(
+            await this.writeWithBackpressure(
+              response,
               `id: ${streamId}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
             );
             cursor = streamId;
@@ -84,9 +98,56 @@ export class EventsService implements OnApplicationShutdown {
     } catch (error) {
       if (!closed) throw error;
     } finally {
+      const remaining = (this.connections.get(userId) ?? 1) - 1;
+      if (remaining <= 0) this.connections.delete(userId);
+      else this.connections.set(userId, remaining);
       client.disconnect();
       if (!response.writableEnded) response.end();
     }
+  }
+
+  private async writeWithBackpressure(
+    response: Response,
+    chunk: string,
+  ): Promise<void> {
+    if (
+      response.writableLength + Buffer.byteLength(chunk) >
+      this.environment.SSE_MAX_BUFFER_BYTES
+    ) {
+      throw new ApiException(
+        'SSE_CLIENT_TOO_SLOW',
+        '实时连接消费过慢，请重新连接以恢复内容',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    if (response.write(chunk)) return;
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(
+          new ApiException(
+            'SSE_CLIENT_TOO_SLOW',
+            '实时连接消费过慢，请重新连接以恢复内容',
+            HttpStatus.SERVICE_UNAVAILABLE,
+          ),
+        );
+      }, this.environment.SSE_DRAIN_TIMEOUT_MS);
+      const cleanup = () => {
+        clearTimeout(timer);
+        response.off('drain', onDrain);
+        response.off('close', onClose);
+      };
+      const onDrain = () => {
+        cleanup();
+        resolve();
+      };
+      const onClose = () => {
+        cleanup();
+        resolve();
+      };
+      response.once('drain', onDrain);
+      response.once('close', onClose);
+    });
   }
 
   async history(

@@ -13,6 +13,8 @@ import { GenerationWorkerService } from '../src/generation/generation-worker.ser
 import { Queue } from 'bullmq';
 import { GENERATION_QUEUE_NAME } from '../src/generation/generation.constants';
 import type { GenerationJob } from '@chat/contracts';
+import { GenerationReliabilityService } from '../src/generation/generation-reliability.service';
+import { ZombieGenerationMonitorService } from '../src/generation/zombie-generation-monitor.service';
 
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL =
@@ -208,6 +210,104 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
       expect(userState.hasUnread).toBe(true);
     } finally {
       await worker.onApplicationShutdown();
+    }
+  });
+
+  it('两个 Processor 竞争同一 generation 时只有一个 Writer 和一个终态', async () => {
+    const generationId = await seedGeneration(prisma);
+    const provider = FakeLlmProvider.text('唯一回答', 5);
+    const first = new GenerationProcessor(prisma, provider, environment);
+    const second = new GenerationProcessor(prisma, provider, environment);
+
+    await Promise.all([
+      first.process(generationId),
+      second.process(generationId),
+    ]);
+
+    const generation = await prisma.generation.findUniqueOrThrow({
+      where: { id: generationId },
+      include: { attempts: true, usageRecords: true, responseMessage: true },
+    });
+    expect(generation.status).toBe(GenerationStatus.COMPLETED);
+    expect(generation.responseMessage.content).toBe('唯一回答');
+    expect(generation.attempts).toHaveLength(1);
+    expect(provider.requests).toHaveLength(1);
+  });
+
+  it('分层并发许可在释放后可再次获取，不泄漏资源', async () => {
+    const reliability = new GenerationReliabilityService({
+      ...environment,
+      GENERATION_GLOBAL_CONCURRENCY: 1,
+      GENERATION_PROVIDER_CONCURRENCY: 1,
+      GENERATION_USER_CONCURRENCY: 1,
+      GENERATION_SEMAPHORE_WAIT_MS: 0,
+    });
+    const input = {
+      generationId: randomUUID(),
+      userId: randomUUID(),
+      provider: 'fake',
+      token: randomUUID(),
+    };
+    try {
+      const first = await reliability.acquire(input);
+      expect(first).not.toBeNull();
+      expect(
+        await reliability.acquire({ ...input, token: randomUUID() }),
+      ).toBeNull();
+      await reliability.release(first!);
+      const second = await reliability.acquire({
+        ...input,
+        token: randomUUID(),
+      });
+      expect(second).not.toBeNull();
+      await reliability.release(second!);
+    } finally {
+      await reliability.onApplicationShutdown();
+    }
+  });
+
+  it('僵尸检查仅在 BullMQ Job 不活跃时保留 partial 并终结 attempt', async () => {
+    const generationId = await seedGeneration(prisma);
+    const writerToken = randomUUID();
+    const generation = await prisma.generation.update({
+      where: { id: generationId },
+      data: {
+        status: GenerationStatus.STREAMING,
+        writerToken,
+        writerHeartbeatAt: new Date(Date.now() - 60_000),
+      },
+    });
+    await prisma.message.update({
+      where: { id: generation.responseMessageId },
+      data: { status: MessageStatus.STREAMING, content: '已保存的 partial' },
+    });
+    await prisma.generationAttempt.create({
+      data: { generationId, attemptNo: 1, writerToken },
+    });
+    const monitor = new ZombieGenerationMonitorService(prisma, {
+      ...environment,
+      GENERATION_HEARTBEAT_TIMEOUT_MS: 1_000,
+    });
+    try {
+      expect(await monitor.checkOnce()).toBe(1);
+      const recovered = await prisma.generation.findUniqueOrThrow({
+        where: { id: generationId },
+        include: { responseMessage: true, attempts: true },
+      });
+      expect(recovered).toMatchObject({
+        status: GenerationStatus.FAILED,
+        errorCode: 'WORKER_LOST',
+      });
+      expect(recovered.responseMessage).toMatchObject({
+        status: MessageStatus.FAILED,
+        content: '已保存的 partial',
+      });
+      expect(recovered.attempts[0]).toMatchObject({
+        status: 'FAILED',
+        errorCode: 'WORKER_LOST',
+      });
+    } finally {
+      await monitor.onApplicationShutdown();
     }
   });
 

@@ -47,6 +47,9 @@ export function ConversationView({
   const content = useGenerationStore(
     (state) => state.drafts[conversationId] ?? '',
   );
+  const connectionStatus = useGenerationStore(
+    (state) => state.connectionStatus,
+  );
   const overlays = useGenerationStore(
     useShallow(selectConversationGenerations(conversationId)),
   );
@@ -156,7 +159,9 @@ export function ConversationView({
     ? '任务已进入队列，切换对话不会中断。'
     : activeOverlays.length > 0
       ? `此对话有 ${activeOverlays.length} 项任务正在运行。`
-      : sendMutationErrorMessage();
+      : connectionStatus === 'disconnected'
+        ? '实时连接已断开，正在重连；已生成内容不会丢失。'
+        : sendMutationErrorMessage();
   useEffect(() => {
     void markConversationRead(conversationId).then((conversation) => {
       queryClient.setQueryData(
@@ -321,6 +326,40 @@ export function ConversationView({
                   message.status === 'COMPLETED' &&
                   message.content ? (
                     <AnswerActions content={message.content} />
+                  ) : null}
+                  {message.role === 'ASSISTANT' &&
+                  (message.status === 'FAILED' ||
+                    message.status === 'CANCELLED') ? (
+                    <div className="generation-terminal-state">
+                      <span>
+                        {message.status === 'CANCELLED'
+                          ? '生成已取消。'
+                          : 'error' in message &&
+                              typeof message.error === 'string'
+                            ? message.error
+                            : '生成失败，已保留收到的部分内容。'}
+                      </span>
+                      {message.status === 'FAILED' ? (
+                        <button
+                          onClick={() => {
+                            const index = messages.findIndex(
+                              (item) => item.id === message.id,
+                            );
+                            const request =
+                              index > 0 ? messages[index - 1] : undefined;
+                            if (request?.role === 'USER') {
+                              useGenerationStore
+                                .getState()
+                                .setDraft(conversationId, request.content);
+                              textareaRef.current?.focus();
+                            }
+                          }}
+                          type="button"
+                        >
+                          填入原问题后重试
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               </article>

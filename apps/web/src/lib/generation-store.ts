@@ -74,6 +74,7 @@ export function reduceGenerationEvent(
 }
 
 interface GenerationStore {
+  connectionStatus: 'connecting' | 'connected' | 'disconnected';
   generations: Record<string, ActiveGenerationState>;
   drafts: Record<string, string>;
   register: (state: ActiveGenerationState) => void;
@@ -88,6 +89,9 @@ interface GenerationStore {
   setDraft: (conversationId: string, content: string) => void;
   clearDraft: (conversationId: string) => void;
   clear: () => void;
+  setConnectionStatus: (
+    status: 'connecting' | 'connected' | 'disconnected',
+  ) => void;
 }
 
 export function selectConversationGenerations(conversationId: string) {
@@ -112,6 +116,7 @@ export function selectConversationActivity(conversationId: string) {
 }
 
 export const useGenerationStore = create<GenerationStore>((set, get) => ({
+  connectionStatus: 'connecting',
   generations: {},
   drafts: {},
   register: (state) =>
@@ -167,5 +172,7 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
       delete drafts[conversationId];
       return { drafts };
     }),
-  clear: () => set({ generations: {}, drafts: {} }),
+  clear: () =>
+    set({ generations: {}, drafts: {}, connectionStatus: 'connecting' }),
+  setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
 }));

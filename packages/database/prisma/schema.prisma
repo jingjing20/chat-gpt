@@ -147,6 +147,8 @@ model Generation {
   providerRequestId  String?             @map("provider_request_id")
   errorCode          String?             @map("error_code") @db.VarChar(100)
   errorDetailSafe    String?             @map("error_detail_safe")
+  writerToken        String?             @map("writer_token") @db.Uuid
+  writerHeartbeatAt  DateTime?           @map("writer_heartbeat_at") @db.Timestamptz(3)
   cancelRequestedAt  DateTime?           @map("cancel_requested_at") @db.Timestamptz(3)
   startedAt          DateTime?           @map("started_at") @db.Timestamptz(3)
   firstTokenAt       DateTime?           @map("first_token_at") @db.Timestamptz(3)
@@ -172,6 +174,7 @@ model GenerationAttempt {
   attemptNo          Int                     @map("attempt_no")
   status             GenerationAttemptStatus @default(STARTED)
   providerRequestId  String?                 @map("provider_request_id")
+  writerToken        String?                 @map("writer_token") @db.Uuid
   startedAt          DateTime                @default(now()) @map("started_at") @db.Timestamptz(3)
   endedAt            DateTime?               @map("ended_at") @db.Timestamptz(3)
   receivedFirstDelta Boolean                 @default(false) @map("received_first_delta")

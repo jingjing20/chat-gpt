@@ -7,6 +7,11 @@ import { WORKER_ENV } from '../config/worker-config';
 import { eventKeys } from './event-keys';
 
 const PUBLISH_SCRIPT = `
+local prior = redis.call('GET', KEYS[5])
+if prior then
+  local decoded = cjson.decode(prior)
+  return { tostring(decoded[1]), decoded[2], decoded[3] }
+end
 local sequence = redis.call('INCR', KEYS[1])
 local generation_id = tostring(sequence) .. '-0'
 local event = cjson.decode(ARGV[1])
@@ -19,6 +24,7 @@ redis.call('XTRIM', KEYS[4], 'MINID', minimum_id)
 redis.call('PEXPIRE', KEYS[1], ARGV[3])
 redis.call('PEXPIRE', KEYS[3], ARGV[3])
 redis.call('PEXPIRE', KEYS[4], ARGV[3])
+redis.call('SET', KEYS[5], cjson.encode({sequence, generation_id, user_id}), 'PX', ARGV[3])
 return { tostring(sequence), generation_id, user_id }
 `;
 
@@ -59,18 +65,34 @@ export class EventPublisherService implements OnApplicationShutdown {
       occurredAt: new Date().toISOString(),
       payload: input.payload,
     };
-    const result = (await this.redis.eval(
-      PUBLISH_SCRIPT,
-      4,
-      keys.sequence,
-      keys.state,
-      keys.generationStream,
-      keys.userStream,
-      JSON.stringify(base),
-      JSON.stringify(input.state),
-      String(this.retentionMs),
-      String(Date.now() - this.retentionMs),
-    )) as [string, string, string];
+    let result: [string, string, string] | undefined;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        result = (await this.redis.eval(
+          PUBLISH_SCRIPT,
+          5,
+          keys.sequence,
+          keys.state,
+          keys.generationStream,
+          keys.userStream,
+          `${this.prefix}:event-dedupe:${base.eventId}`,
+          JSON.stringify(base),
+          JSON.stringify(input.state),
+          String(this.retentionMs),
+          String(Date.now() - this.retentionMs),
+        )) as [string, string, string];
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, 50 * 2 ** attempt),
+          );
+        }
+      }
+    }
+    if (!result) throw lastError;
     return { ...base, sequence: Number(result[0]), streamId: result[2] };
   }
 

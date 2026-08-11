@@ -198,6 +198,26 @@ export type CreateGenerationResponse = z.infer<
 >;
 export type GenerationJob = z.infer<typeof generationJobSchema>;
 
+export const generationAttemptResponseSchema = z.object({
+  id: z.string().uuid(),
+  generationId: z.string().uuid(),
+  attemptNo: z.number().int().positive(),
+  status: z.enum(['STARTED', 'COMPLETED', 'FAILED', 'CANCELLED']),
+  providerRequestId: z.string().nullable(),
+  receivedFirstDelta: z.boolean(),
+  httpStatus: z.number().int().nullable(),
+  errorCode: z.string().nullable(),
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime().nullable(),
+});
+export const generationAttemptListResponseSchema = z.object({
+  generationId: z.string().uuid(),
+  attempts: z.array(generationAttemptResponseSchema),
+});
+export type GenerationAttemptListResponse = z.infer<
+  typeof generationAttemptListResponseSchema
+>;
+
 export const generationEventTypeSchema = z.enum([
   'generation.started',
   'message.reasoning_delta',

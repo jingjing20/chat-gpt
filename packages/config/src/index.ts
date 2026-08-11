@@ -35,6 +35,9 @@ export const apiEnvSchema = infrastructureSchema.extend({
   GENERATION_QUEUE_PREFIX: z.string().trim().min(1).default('chat:dev:queue'),
   EVENT_KEY_PREFIX: z.string().trim().min(1).default('chat:dev:evt'),
   EVENT_HEARTBEAT_MS: z.coerce.number().int().min(1_000).default(20_000),
+  SSE_MAX_CONNECTIONS_PER_USER: z.coerce.number().int().min(1).default(3),
+  SSE_MAX_BUFFER_BYTES: z.coerce.number().int().min(1024).default(262_144),
+  SSE_DRAIN_TIMEOUT_MS: z.coerce.number().int().min(100).default(5_000),
   EVENT_RETENTION_MS: z.coerce.number().int().min(60_000).default(86_400_000),
   USER_GENERATION_CONCURRENCY_LIMIT: z.coerce.number().int().min(1).default(2),
 });
@@ -61,8 +64,36 @@ export const workerEnvSchema = infrastructureSchema
       .default('development-only-user-hash-secret'),
     GENERATION_QUEUE_PREFIX: z.string().trim().min(1).default('chat:dev:queue'),
     GENERATION_WORKER_CONCURRENCY: z.coerce.number().int().min(1).default(4),
+    GENERATION_GLOBAL_CONCURRENCY: z.coerce.number().int().min(1).default(16),
+    GENERATION_PROVIDER_CONCURRENCY: z.coerce.number().int().min(1).default(8),
+    GENERATION_USER_CONCURRENCY: z.coerce.number().int().min(1).default(2),
+    GENERATION_SEMAPHORE_TTL_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .default(30_000),
+    GENERATION_SEMAPHORE_WAIT_MS: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .default(30_000),
+    GENERATION_HEARTBEAT_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(500)
+      .default(5_000),
+    GENERATION_HEARTBEAT_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .default(30_000),
     GENERATION_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
     GENERATION_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(0).default(250),
+    GENERATION_RETRY_MAX_DELAY_MS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(5_000),
     GENERATION_CANCEL_POLL_MS: z.coerce.number().int().min(25).default(200),
     EVENT_KEY_PREFIX: z.string().trim().min(1).default('chat:dev:evt'),
     EVENT_RETENTION_MS: z.coerce.number().int().min(60_000).default(86_400_000),

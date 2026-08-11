@@ -12,12 +12,16 @@ import {
   type NormalizedChatMessage,
   type NormalizedUsage,
 } from '@chat/llm';
-import { Inject, Injectable } from '@nestjs/common';
-import { createHmac } from 'node:crypto';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { createHmac, randomUUID } from 'node:crypto';
 import { WORKER_ENV } from '../config/worker-config';
 import { PrismaService } from '../database/prisma.service';
 import { LLM_PROVIDER_ADAPTER } from './generation.constants';
 import { EventPublisherService } from '../events/event-publisher.service';
+import {
+  GenerationReliabilityService,
+  type GenerationPermit,
+} from './generation-reliability.service';
 
 const TERMINAL_STATUSES = [
   GenerationStatus.COMPLETED,
@@ -27,6 +31,7 @@ const TERMINAL_STATUSES = [
 
 @Injectable()
 export class GenerationProcessor {
+  private readonly logger = new Logger(GenerationProcessor.name);
   private readonly fallbackSequences = new Map<string, number>();
 
   constructor(
@@ -35,10 +40,89 @@ export class GenerationProcessor {
     private readonly provider: LlmProviderAdapter,
     @Inject(WORKER_ENV) private readonly environment: WorkerEnv,
     private readonly events?: EventPublisherService,
+    @Optional() private readonly reliability?: GenerationReliabilityService,
   ) {}
 
   async process(generationId: string): Promise<void> {
-    let generation = await this.prisma.generation.findUnique({
+    const candidate = await this.withDatabaseRetry(() =>
+      this.prisma.generation.findUnique({
+        where: { id: generationId },
+        select: { id: true, userId: true, provider: true, status: true },
+      }),
+    );
+    if (!candidate || TERMINAL_STATUSES.includes(candidate.status as never))
+      return;
+    if (candidate.status === GenerationStatus.CANCEL_REQUESTED) {
+      await this.processOwned(generationId, '');
+      return;
+    }
+    if (candidate.status !== GenerationStatus.QUEUED) return;
+
+    const writerToken = randomUUID();
+    let permit: GenerationPermit | null = null;
+    if (this.reliability) {
+      permit = await this.reliability.acquire({
+        generationId,
+        userId: candidate.userId,
+        provider: candidate.provider,
+        token: writerToken,
+      });
+      if (!permit) throw new Error('GENERATION_CAPACITY_UNAVAILABLE');
+    }
+    const claimed = await this.withDatabaseRetry(() =>
+      this.prisma.generation.updateMany({
+        where: {
+          id: generationId,
+          status: GenerationStatus.QUEUED,
+          writerToken: null,
+        },
+        data: {
+          status: GenerationStatus.STARTING,
+          startedAt: new Date(),
+          writerToken,
+          writerHeartbeatAt: new Date(),
+        },
+      }),
+    );
+    if (claimed.count === 0) {
+      if (permit && this.reliability) await this.reliability.release(permit);
+      return;
+    }
+
+    let heartbeatRunning = false;
+    let ownershipLost = false;
+    const heartbeat = setInterval(() => {
+      if (heartbeatRunning) return;
+      heartbeatRunning = true;
+      void this.heartbeat(generationId, writerToken, permit)
+        .then((owned) => {
+          if (!owned) ownershipLost = true;
+        })
+        .finally(() => {
+          heartbeatRunning = false;
+        });
+    }, this.environment.GENERATION_HEARTBEAT_INTERVAL_MS);
+    heartbeat.unref();
+    try {
+      await this.processOwned(generationId, writerToken, () => ownershipLost);
+    } finally {
+      clearInterval(heartbeat);
+      if (permit && this.reliability) {
+        try {
+          await this.reliability.release(permit);
+        } catch {
+          this.logger.warn(`并发许可释放失败 generationId=${generationId}`);
+        }
+      }
+    }
+  }
+
+  private async processOwned(
+    generationId: string,
+    writerToken: string,
+    ownershipLost: () => boolean = () => false,
+  ): Promise<void> {
+    const generation = await this.prisma.generation.findUnique({
       where: { id: generationId },
     });
     if (!generation) return;
@@ -53,18 +137,10 @@ export class GenerationProcessor {
       );
       return;
     }
-    if (generation.status === GenerationStatus.QUEUED) {
-      const claimed = await this.prisma.generation.updateMany({
-        where: { id: generationId, status: GenerationStatus.QUEUED },
-        data: { status: GenerationStatus.STARTING, startedAt: new Date() },
-      });
-      if (claimed.count === 0) return;
-      generation = await this.prisma.generation.findUniqueOrThrow({
-        where: { id: generationId },
-      });
-    } else if (generation.status !== GenerationStatus.STARTING) {
+    if (generation.status !== GenerationStatus.STARTING) {
       return;
     }
+    if (writerToken && generation.writerToken !== writerToken) return;
 
     const messages = await this.loadContext(
       generation.conversationId,
@@ -145,7 +221,7 @@ export class GenerationProcessor {
       cancelTimer.unref();
 
       const attempt = await this.prisma.generationAttempt.create({
-        data: { generationId, attemptNo },
+        data: { generationId, attemptNo, writerToken: writerToken || null },
       });
       sequence = await this.publishEvent(
         generation,
@@ -234,6 +310,12 @@ export class GenerationProcessor {
           },
           controller.signal,
         )) {
+          if (ownershipLost()) {
+            controller.abort(
+              new DOMException('Writer 所有权已丢失', 'AbortError'),
+            );
+            throw new Error('WRITER_OWNERSHIP_LOST');
+          }
           if (event.type === 'content_delta') {
             content += event.delta;
             if (!receivedFirstDelta) {
@@ -297,7 +379,7 @@ export class GenerationProcessor {
             'STREAMING',
           );
         }
-        await this.finalizeCompleted({
+        const finalized = await this.finalizeCompleted({
           generationId,
           userId: generation.userId,
           conversationId: generation.conversationId,
@@ -311,6 +393,7 @@ export class GenerationProcessor {
           provider: generation.provider,
           model: generation.model,
         });
+        if (!finalized) return;
         sequence = await this.publishEvent(
           generation,
           'generation.completed',
@@ -341,6 +424,14 @@ export class GenerationProcessor {
           return;
         }
         const normalized = this.normalizeError(error, receivedFirstDelta);
+        if (
+          normalized.code === 'AUTHENTICATION_FAILED' ||
+          normalized.code === 'INSUFFICIENT_BALANCE'
+        ) {
+          this.logger.error(
+            `高优供应商告警 generationId=${generationId} attemptNo=${attemptNo} provider=${generation.provider} code=${normalized.code}`,
+          );
+        }
         await this.completeAttempt(
           attempt.id,
           GenerationAttemptStatus.FAILED,
@@ -355,7 +446,7 @@ export class GenerationProcessor {
           await this.retryDelay(attemptNo);
           continue;
         }
-        await this.finalizeFailed({
+        const finalized = await this.finalizeFailed({
           generationId,
           userId: generation.userId,
           conversationId: generation.conversationId,
@@ -368,6 +459,7 @@ export class GenerationProcessor {
           provider: generation.provider,
           model: generation.model,
         });
+        if (!finalized) return;
         sequence = await this.publishEvent(
           generation,
           'generation.failed',
@@ -442,29 +534,31 @@ export class GenerationProcessor {
     reasoningContent: string;
     sequence: number;
   }): Promise<void> {
-    await this.prisma.$transaction(async (transaction) => {
-      const advanced = await transaction.generation.updateMany({
-        where: {
-          id: input.generationId,
-          checkpointSequence: { lt: input.sequence },
-          status: {
-            in: [GenerationStatus.STARTING, GenerationStatus.STREAMING],
+    await this.withDatabaseRetry(() =>
+      this.prisma.$transaction(async (transaction) => {
+        const advanced = await transaction.generation.updateMany({
+          where: {
+            id: input.generationId,
+            checkpointSequence: { lt: input.sequence },
+            status: {
+              in: [GenerationStatus.STARTING, GenerationStatus.STREAMING],
+            },
           },
-        },
-        data: {
-          lastSequence: input.sequence,
-          checkpointSequence: input.sequence,
-        },
-      });
-      if (advanced.count === 0) return;
-      await transaction.message.update({
-        where: { id: input.responseMessageId },
-        data: {
-          content: input.content,
-          reasoningContent: this.savedReasoning(input.reasoningContent),
-        },
-      });
-    });
+          data: {
+            lastSequence: input.sequence,
+            checkpointSequence: input.sequence,
+          },
+        });
+        if (advanced.count === 0) return;
+        await transaction.message.update({
+          where: { id: input.responseMessageId },
+          data: {
+            content: input.content,
+            reasoningContent: this.savedReasoning(input.reasoningContent),
+          },
+        });
+      }),
+    );
   }
 
   private async loadContext(
@@ -513,22 +607,24 @@ export class GenerationProcessor {
     error?: ProviderError,
     providerRequestId?: string | null,
   ): Promise<void> {
-    await this.prisma.generationAttempt.update({
-      where: { id: attemptId },
-      data: {
-        status,
-        endedAt: new Date(),
-        receivedFirstDelta,
-        providerRequestId: providerRequestId ?? null,
-        httpStatus: error?.httpStatus ?? null,
-        errorCode: error?.code ?? null,
-      },
-    });
+    await this.withDatabaseRetry(() =>
+      this.prisma.generationAttempt.update({
+        where: { id: attemptId },
+        data: {
+          status,
+          endedAt: new Date(),
+          receivedFirstDelta,
+          providerRequestId: providerRequestId ?? null,
+          httpStatus: error?.httpStatus ?? null,
+          errorCode: error?.code ?? null,
+        },
+      }),
+    );
   }
 
-  private async finalizeCompleted(input: FinalizeInput): Promise<void> {
+  private async finalizeCompleted(input: FinalizeInput): Promise<boolean> {
     const now = new Date();
-    await this.prisma.$transaction(async (transaction) => {
+    const finalized = await this.prisma.$transaction(async (transaction) => {
       const transitioned = await transaction.generation.updateMany({
         where: {
           id: input.generationId,
@@ -545,7 +641,7 @@ export class GenerationProcessor {
           completedAt: now,
         },
       });
-      if (transitioned.count === 0) return;
+      if (transitioned.count === 0) return false;
       await transaction.message.update({
         where: { id: input.responseMessageId },
         data: {
@@ -565,6 +661,7 @@ export class GenerationProcessor {
         data: { hasUnread: true },
       });
       if (input.usage) await this.createUsage(transaction, input, input.usage);
+      return true;
     });
     if (await this.isCancellationRequested(input.generationId)) {
       await this.finalizeCancelled(
@@ -574,11 +671,12 @@ export class GenerationProcessor {
         input.sequence,
       );
     }
+    return finalized;
   }
 
-  private async finalizeFailed(input: FailureInput): Promise<void> {
+  private async finalizeFailed(input: FailureInput): Promise<boolean> {
     const now = new Date();
-    await this.prisma.$transaction(async (transaction) => {
+    const finalized = await this.prisma.$transaction(async (transaction) => {
       const transitioned = await transaction.generation.updateMany({
         where: {
           id: input.generationId,
@@ -595,7 +693,7 @@ export class GenerationProcessor {
           completedAt: now,
         },
       });
-      if (transitioned.count === 0) return;
+      if (transitioned.count === 0) return false;
       await transaction.message.update({
         where: { id: input.responseMessageId },
         data: {
@@ -615,6 +713,7 @@ export class GenerationProcessor {
         data: { hasUnread: true },
       });
       if (input.usage) await this.createUsage(transaction, input, input.usage);
+      return true;
     });
     if (await this.isCancellationRequested(input.generationId)) {
       await this.finalizeCancelled(
@@ -624,6 +723,7 @@ export class GenerationProcessor {
         input.sequence,
       );
     }
+    return finalized;
   }
 
   private async finalizeCancelled(
@@ -740,6 +840,31 @@ export class GenerationProcessor {
     return generation?.status === GenerationStatus.CANCEL_REQUESTED;
   }
 
+  private async heartbeat(
+    generationId: string,
+    writerToken: string,
+    permit: GenerationPermit | null,
+  ): Promise<boolean> {
+    try {
+      if (permit && this.reliability && !(await this.reliability.renew(permit)))
+        return false;
+      const updated = await this.prisma.generation.updateMany({
+        where: {
+          id: generationId,
+          writerToken,
+          status: {
+            in: [GenerationStatus.STARTING, GenerationStatus.STREAMING],
+          },
+        },
+        data: { writerHeartbeatAt: new Date() },
+      });
+      return updated.count === 1;
+    } catch {
+      this.logger.warn(`Worker heartbeat 失败 generationId=${generationId}`);
+      return true;
+    }
+  }
+
   private normalizeError(
     error: unknown,
     receivedFirstDelta: boolean,
@@ -765,9 +890,38 @@ export class GenerationProcessor {
   }
 
   private async retryDelay(attemptNo: number): Promise<void> {
-    const delay =
+    const exponential =
       this.environment.GENERATION_RETRY_BASE_DELAY_MS * 2 ** (attemptNo - 1);
+    const delay = Math.min(
+      this.environment.GENERATION_RETRY_MAX_DELAY_MS,
+      Math.floor(exponential * (0.75 + Math.random() * 0.5)),
+    );
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+
+  private async withDatabaseRetry<T>(operation: () => Promise<T>): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        if (!this.isTransientDatabaseError(error) || attempt === 2) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 50 * 2 ** attempt));
+      }
+    }
+    throw lastError;
+  }
+
+  private isTransientDatabaseError(error: unknown): boolean {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return ['P1001', 'P1002', 'P1008', 'P1017', 'P2024'].includes(error.code);
+    }
+    return (
+      error instanceof Prisma.PrismaClientInitializationError ||
+      (error instanceof Error &&
+        /connection|timeout|closed/i.test(error.message))
+    );
   }
 }
 

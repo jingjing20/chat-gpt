@@ -81,9 +81,15 @@ export class GenerationProcessor {
     const initialAttemptCount = await this.prisma.generationAttempt.count({
       where: { generationId },
     });
-    let content = '';
-    let reasoningContent = '';
+    const checkpointMessage = await this.prisma.message.findUniqueOrThrow({
+      where: { id: generation.responseMessageId },
+      select: { content: true, reasoningContent: true },
+    });
+    let content = checkpointMessage.content;
+    let reasoningContent = checkpointMessage.reasoningContent ?? '';
     let sequence = Number(generation.lastSequence);
+    let lastCheckpointAt = Date.now();
+    let lastCheckpointChars = content.length + reasoningContent.length;
 
     if (initialAttemptCount >= this.environment.GENERATION_MAX_ATTEMPTS) {
       await this.finalizeFailed({
@@ -151,6 +157,15 @@ export class GenerationProcessor {
         reasoningContent,
         'STARTING',
       );
+      await this.writeCheckpoint({
+        generationId,
+        responseMessageId: generation.responseMessageId,
+        content,
+        reasoningContent,
+        sequence,
+      });
+      lastCheckpointAt = Date.now();
+      lastCheckpointChars = content.length + reasoningContent.length;
       let receivedFirstDelta = false;
       let usage: NormalizedUsage | undefined;
       let finishReason: string | null = null;
@@ -169,6 +184,23 @@ export class GenerationProcessor {
           reasoningContent,
           'STREAMING',
         );
+        const currentChars = content.length + reasoningContent.length;
+        if (
+          Date.now() - lastCheckpointAt >=
+            this.environment.GENERATION_CHECKPOINT_INTERVAL_MS ||
+          currentChars - lastCheckpointChars >=
+            this.environment.GENERATION_CHECKPOINT_MAX_CHARS
+        ) {
+          await this.writeCheckpoint({
+            generationId,
+            responseMessageId: generation.responseMessageId,
+            content,
+            reasoningContent,
+            sequence,
+          });
+          lastCheckpointAt = Date.now();
+          lastCheckpointChars = currentChars;
+        }
         bufferedType = null;
         bufferedDelta = '';
         lastFlushAt = Date.now();
@@ -398,8 +430,40 @@ export class GenerationProcessor {
     sequence: number,
   ): Promise<void> {
     await this.prisma.generation.updateMany({
-      where: { id: generationId },
+      where: { id: generationId, checkpointSequence: { lt: sequence } },
       data: { lastSequence: sequence, checkpointSequence: sequence },
+    });
+  }
+
+  private async writeCheckpoint(input: {
+    generationId: string;
+    responseMessageId: string;
+    content: string;
+    reasoningContent: string;
+    sequence: number;
+  }): Promise<void> {
+    await this.prisma.$transaction(async (transaction) => {
+      const advanced = await transaction.generation.updateMany({
+        where: {
+          id: input.generationId,
+          checkpointSequence: { lt: input.sequence },
+          status: {
+            in: [GenerationStatus.STARTING, GenerationStatus.STREAMING],
+          },
+        },
+        data: {
+          lastSequence: input.sequence,
+          checkpointSequence: input.sequence,
+        },
+      });
+      if (advanced.count === 0) return;
+      await transaction.message.update({
+        where: { id: input.responseMessageId },
+        data: {
+          content: input.content,
+          reasoningContent: this.savedReasoning(input.reasoningContent),
+        },
+      });
     });
   }
 

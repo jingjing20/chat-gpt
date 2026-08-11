@@ -10,6 +10,7 @@ describe('事件原子发布', () => {
   const environment = {
     REDIS_URL: redisUrl,
     EVENT_KEY_PREFIX: prefix,
+    EVENT_RETENTION_MS: 86_400_000,
   } as WorkerEnv;
   const redis = new Redis(redisConnectionOptions(redisUrl));
   const publisher = new EventPublisherService(environment);
@@ -61,5 +62,7 @@ describe('事件原子发布', () => {
     expect(JSON.parse(state!)).toMatchObject({ content: '甲乙' });
     expect(generationEvents.map(([id]) => id)).toEqual(['1-0', '2-0']);
     expect(userEvents).toHaveLength(2);
+    await expect(redis.pttl(keys.state)).resolves.toBeGreaterThan(0);
+    await expect(redis.pttl(keys.generationStream)).resolves.toBeGreaterThan(0);
   });
 });

@@ -115,6 +115,40 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
     expect(provider.requests).toHaveLength(1);
   });
 
+  it('流式生成期间按版本写入 PostgreSQL checkpoint', async () => {
+    const generationId = await seedGeneration(prisma);
+    const checkpointContent = '检'.repeat(400);
+    const provider = new FakeLlmProvider([
+      { event: { type: 'content_delta', delta: checkpointContent } },
+      {
+        event: { type: 'finish', finishReason: 'stop' },
+        delayMs: 500,
+      },
+    ]);
+    const processorEnvironment = {
+      ...environment,
+      GENERATION_CHECKPOINT_MAX_CHARS: 256,
+    };
+    const processing = new GenerationProcessor(
+      prisma,
+      provider,
+      processorEnvironment,
+    ).process(generationId);
+
+    await waitFor(async () => {
+      const generation = await prisma.generation.findUniqueOrThrow({
+        where: { id: generationId },
+        include: { responseMessage: true },
+      });
+      return (
+        generation.status === GenerationStatus.STREAMING &&
+        generation.checkpointSequence > 0 &&
+        generation.responseMessage.content === checkpointContent
+      );
+    });
+    await processing;
+  });
+
   it('取消标记会 Abort 上游并持久化 CANCELLED 终态', async () => {
     const generationId = await seedGeneration(prisma);
     const provider = FakeLlmProvider.text('不会完整返回', 1000);
@@ -124,10 +158,10 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
       environment,
     ).process(generationId);
     await waitFor(async () => {
-      const generation = await prisma.generation.findUniqueOrThrow({
-        where: { id: generationId },
+      const attemptCount = await prisma.generationAttempt.count({
+        where: { generationId },
       });
-      return generation.status === GenerationStatus.STARTING;
+      return attemptCount === 1 && provider.requests.length === 1;
     });
     await prisma.generation.update({
       where: { id: generationId },

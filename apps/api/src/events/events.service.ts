@@ -110,36 +110,75 @@ export class EventsService implements OnApplicationShutdown {
       userId,
       generationId,
     );
-    const rows = await this.redis.xrange(
+    const recovery = (await this.redis.eval(
+      `
+      return {
+        redis.call('XRANGE', KEYS[1], ARGV[1], '+'),
+        redis.call('GET', KEYS[2]) or '',
+        redis.call('GET', KEYS[3]) or ''
+      }
+      `,
+      3,
       keys.generationStream!,
+      keys.state!,
+      keys.sequence!,
       `(${afterSequence}-0`,
-      '+',
-    );
+    )) as [Array<[string, string[]]>, string, string];
+    const [rows, rawState, rawSequence] = recovery;
     const events = rows.flatMap(([streamId, fields]) => {
       const raw = this.field(fields, 'event');
       if (!raw) return [];
       return [userEventSchema.parse({ ...JSON.parse(raw), streamId })];
     });
-    const first = events[0];
-    if (first && first.sequence === afterSequence + 1) {
+    const latestSequence = Number(rawSequence ?? generation.lastSequence);
+    const isContiguous = events.every(
+      (event, index) => event.sequence === afterSequence + index + 1,
+    );
+    if (
+      (events.length === 0 && afterSequence === latestSequence) ||
+      (events.length > 0 && isContiguous)
+    ) {
       return {
         mode: 'events',
         events,
-        lastSequence: events.at(-1)!.sequence,
+        lastSequence: events.at(-1)?.sequence ?? latestSequence,
       };
     }
+    const state = rawState
+      ? (JSON.parse(rawState) as Record<string, unknown>)
+      : {};
     return {
       mode: 'snapshot',
       snapshot: {
-        content: generation.responseMessage.content,
-        reasoningContent: generation.responseMessage.reasoningContent,
-        sequence: Number(generation.lastSequence),
-        status: generation.status,
+        content:
+          typeof state.content === 'string'
+            ? state.content
+            : generation.responseMessage.content,
+        reasoningContent:
+          typeof state.reasoningContent === 'string'
+            ? state.reasoningContent
+            : generation.responseMessage.reasoningContent,
+        sequence: latestSequence,
+        status: generationStatusSchema
+          .catch(generation.status)
+          .parse(state.status),
       },
     };
   }
 
   async sync(userId: string): Promise<GenerationSyncResponse> {
+    const userStream = eventKeys(
+      this.environment.EVENT_KEY_PREFIX,
+      userId,
+    ).userStream;
+    const initialTail = await this.redis.xrevrange(
+      userStream,
+      '+',
+      '-',
+      'COUNT',
+      1,
+    );
+    const eventCursor = initialTail[0]?.[0] ?? '0-0';
     const active = await this.prisma.generation.findMany({
       where: {
         userId,
@@ -154,10 +193,6 @@ export class EventsService implements OnApplicationShutdown {
       },
       include: { responseMessage: true },
     });
-    const userStream = eventKeys(
-      this.environment.EVENT_KEY_PREFIX,
-      userId,
-    ).userStream;
     const snapshotKeys = active.flatMap((generation) => {
       const keys = eventKeys(
         this.environment.EVENT_KEY_PREFIX,
@@ -168,22 +203,20 @@ export class EventsService implements OnApplicationShutdown {
     });
     const values = (await this.redis.eval(
       `
-      local tail = redis.call('XREVRANGE', KEYS[1], '+', '-', 'COUNT', 1)
-      local result = { (#tail == 0 and '0-0' or tail[1][1]) }
-      for i = 2, #KEYS do
+      local result = {}
+      for i = 1, #KEYS do
         table.insert(result, redis.call('GET', KEYS[i]) or '')
       end
       return result
       `,
-      1 + snapshotKeys.length,
-      userStream,
+      snapshotKeys.length,
       ...snapshotKeys,
     )) as string[];
     return {
-      eventCursor: values[0] ?? '0-0',
+      eventCursor,
       activeGenerations: active.map((generation, index) => {
-        const raw = values[index * 2 + 1];
-        const redisSequence = values[index * 2 + 2];
+        const raw = values[index * 2];
+        const redisSequence = values[index * 2 + 1];
         const state = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
         return {
           generationId: generation.id,

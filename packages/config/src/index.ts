@@ -35,6 +35,7 @@ export const apiEnvSchema = infrastructureSchema.extend({
   GENERATION_QUEUE_PREFIX: z.string().trim().min(1).default('chat:dev:queue'),
   EVENT_KEY_PREFIX: z.string().trim().min(1).default('chat:dev:evt'),
   EVENT_HEARTBEAT_MS: z.coerce.number().int().min(1_000).default(20_000),
+  EVENT_RETENTION_MS: z.coerce.number().int().min(60_000).default(86_400_000),
   USER_GENERATION_CONCURRENCY_LIMIT: z.coerce.number().int().min(1).default(2),
 });
 
@@ -64,8 +65,19 @@ export const workerEnvSchema = infrastructureSchema
     GENERATION_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(0).default(250),
     GENERATION_CANCEL_POLL_MS: z.coerce.number().int().min(25).default(200),
     EVENT_KEY_PREFIX: z.string().trim().min(1).default('chat:dev:evt'),
+    EVENT_RETENTION_MS: z.coerce.number().int().min(60_000).default(86_400_000),
     GENERATION_DELTA_FLUSH_MS: z.coerce.number().int().min(10).default(30),
     GENERATION_DELTA_MAX_CHARS: z.coerce.number().int().min(32).default(384),
+    GENERATION_CHECKPOINT_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(100)
+      .default(750),
+    GENERATION_CHECKPOINT_MAX_CHARS: z.coerce
+      .number()
+      .int()
+      .min(256)
+      .default(3072),
   })
   .superRefine((environment, context) => {
     if (environment.NODE_ENV === 'production' && !environment.LLM_API_KEY) {

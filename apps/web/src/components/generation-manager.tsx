@@ -31,10 +31,21 @@ export function GenerationManager({ userId }: { userId: string }) {
           lastAppliedSequence: history.snapshot.sequence,
           status: history.snapshot.status,
         });
-        return;
+      } else {
+        for (const missed of history.events) {
+          if (useGenerationStore.getState().apply(missed) === 'gap') {
+            throw new Error('Generation 补偿事件仍存在缺口');
+          }
+        }
       }
-      for (const missed of history.events) {
-        useGenerationStore.getState().apply(missed);
+      const repaired =
+        useGenerationStore.getState().generations[event.generationId];
+      if (
+        !repaired ||
+        repaired.syncState === 'resyncing' ||
+        repaired.lastAppliedSequence < event.sequence
+      ) {
+        throw new Error('Generation 补偿未追平实时事件');
       }
     };
 

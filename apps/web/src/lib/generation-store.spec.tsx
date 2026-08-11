@@ -37,6 +37,35 @@ test('发现顺序缺口后暂停追加', () => {
   assert.equal(result.state.syncState, 'resyncing');
 });
 
+test('快照事件替换正文并推进到 snapshotSequence', () => {
+  const initial = reduceGenerationEvent(undefined, event(1, '旧')).state;
+  const snapshot: UserEvent = {
+    ...event(2),
+    type: 'message.snapshot',
+    payload: {
+      content: '完整正文',
+      reasoningContent: '完整推理',
+      snapshotSequence: 7,
+    },
+  };
+  const result = reduceGenerationEvent(initial, snapshot);
+  assert.equal(result.result, 'applied');
+  assert.equal(result.state.content, '完整正文');
+  assert.equal(result.state.reasoningContent, '完整推理');
+  assert.equal(result.state.lastAppliedSequence, 7);
+  assert.equal(result.state.syncState, 'synced');
+});
+
+test('缺口补偿完成前不会追加迟到事件', () => {
+  const first = reduceGenerationEvent(undefined, event(1, '甲'));
+  const gap = reduceGenerationEvent(first.state, event(3, '丙'));
+  assert.equal(gap.state.content, '甲');
+  const repaired = reduceGenerationEvent(gap.state, event(2, '乙'));
+  const converged = reduceGenerationEvent(repaired.state, event(3, '丙'));
+  assert.equal(converged.state.content, '甲乙丙');
+  assert.equal(converged.state.syncState, 'synced');
+});
+
 test('对话活动 selector 只汇总目标对话的活动任务', () => {
   const active = reduceGenerationEvent(undefined, event(1)).state;
   const other = {

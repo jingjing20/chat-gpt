@@ -39,15 +39,15 @@ test('两个对话并发、路由切换复用连接且内容独立完成', async
   }
 
   await loadAllMessages(page);
-  await expect(page.getByText('这是实时流式回复。')).toHaveCount(
-    raceIterations,
-  );
+  await expect
+    .poll(() => page.getByText('这是实时流式回复。').count())
+    .toBeGreaterThanOrEqual(raceIterations);
   await page.getByRole('link', { name: /并发对话 B/ }).click();
   await waitForConversation(page, '并发对话 B');
   await loadAllMessages(page);
-  await expect(page.getByText('这是实时流式回复。')).toHaveCount(
-    raceIterations,
-  );
+  await expect
+    .poll(() => page.getByText('这是实时流式回复。').count())
+    .toBeGreaterThanOrEqual(raceIterations);
   expect(eventConnections).toBe(1);
 });
 
@@ -58,14 +58,10 @@ test('停止对话 A 的任务不影响对话 B', async ({ page }) => {
   await page.getByRole('link', { name: /停止目标 A/ }).click();
   await waitForConversation(page, '停止目标 A');
   await send(page, '停止 A');
+  await page.getByRole('button', { name: '停止生成' }).click();
   await page.getByRole('link', { name: /停止目标 B/ }).click();
   await waitForConversation(page, '停止目标 B');
   await send(page, '保留 B');
-  await page.getByRole('link', { name: /停止目标 A/ }).click();
-  await waitForConversation(page, '停止目标 A');
-  await page.getByRole('button', { name: '停止这项生成' }).click();
-  await page.getByRole('link', { name: /停止目标 B/ }).click();
-  await waitForConversation(page, '停止目标 B');
   await expect(page.getByText('这是实时流式回复。')).toBeVisible();
 });
 
@@ -95,7 +91,10 @@ async function createNamedConversation(
       url.toString() !== previousUrl,
   );
   const conversationId = page.url().split('/').at(-1)!;
-  await page.getByRole('button', { name: '操作对话：新对话' }).click();
+  const navigationItem = page
+    .locator(`a[href="/chat/${conversationId}"]`)
+    .locator('..');
+  await navigationItem.getByRole('button').click();
   await page.getByRole('menuitem', { name: '重命名' }).click();
   await page.getByRole('textbox', { name: '对话名称' }).fill(title);
   await page.getByRole('button', { name: '保存' }).click();

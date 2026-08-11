@@ -17,7 +17,7 @@ test('恶意 Markdown 不能执行，刷新后对话和消息仍然存在', asyn
   await page.getByRole('button', { name: '发送消息' }).click();
   await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/i);
 
-  await expect(page.getByText('安全文本')).toBeVisible();
+  await expect(page.getByText('安全文本', { exact: true })).toBeVisible();
   const activeReasoning = page.getByRole('button', { name: '正在思考' });
   await expect(activeReasoning).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByText('安全分析')).toBeVisible();
@@ -40,7 +40,7 @@ test('恶意 Markdown 不能执行，刷新后对话和消息仍然存在', asyn
   ).toBe(false);
 
   await page.reload();
-  await expect(page.getByText('安全文本')).toBeVisible();
+  await expect(page.getByText('安全文本', { exact: true })).toBeVisible();
   await expect(page.getByText(/这是实时流式回复/)).toBeVisible();
   expect(
     await page.evaluate(() =>

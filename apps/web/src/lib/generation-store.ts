@@ -115,16 +115,17 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
   generations: {},
   drafts: {},
   register: (state) =>
-    set((store) =>
-      store.generations[state.generationId]
+    set((store) => {
+      const current = store.generations[state.generationId];
+      return current && current.lastAppliedSequence >= state.lastAppliedSequence
         ? store
         : {
             generations: {
               ...store.generations,
               [state.generationId]: state,
             },
-          },
-    ),
+          };
+    }),
   apply: (event) => {
     const reduced = reduceGenerationEvent(
       get().generations[event.generationId],
@@ -142,6 +143,9 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
     set((store) => {
       const current = store.generations[generationId];
       if (!current) return store;
+      if (snapshot.lastAppliedSequence < current.lastAppliedSequence) {
+        return store;
+      }
       return {
         generations: {
           ...store.generations,

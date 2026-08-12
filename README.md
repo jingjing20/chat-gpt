@@ -25,9 +25,11 @@ docs/          架构决策和运行手册
 cp .env.example .env
 pnpm install
 pnpm infra:up
-pnpm db:migrate:deploy
 pnpm dev
 ```
+
+`pnpm dev` 会先执行尚未应用的数据库迁移，迁移失败时不会启动应用进程。
+只启动 API 或 Worker 的根目录命令也具有相同保护。生产部署仍应在启动应用前独立执行迁移。
 
 默认本地端点：
 

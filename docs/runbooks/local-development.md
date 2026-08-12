@@ -6,9 +6,12 @@
 cp .env.example .env
 pnpm install
 pnpm infra:up
-pnpm db:migrate:deploy
 pnpm dev
 ```
+
+根目录的 `pnpm dev`、`pnpm dev:api` 和 `pnpm dev:worker` 会先运行
+`db:migrate:deploy`，仅应用尚未记录的迁移。迁移失败会阻止服务启动，避免新版
+Prisma Client 连接旧表结构。`dev:web` 不访问数据库，因此不会触发迁移。
 
 Docker Compose 自动读取 `.env`。默认宿主机端口为 PostgreSQL `15432`、Redis `16379`，用于避开常见本地冲突。若端口已被占用，请选择空闲的 `POSTGRES_HOST_PORT` 或 `REDIS_HOST_PORT`，并同步更新连接 URL。
 
@@ -31,7 +34,8 @@ pnpm db:generate
 pnpm db:migrate:deploy
 ```
 
-生产部署只使用 `db:migrate:deploy`。开发迁移命令 `db:migrate:dev` 会生成新迁移，只能在明确修改 Schema 时运行。
+生产部署只使用 `db:migrate:deploy`，并应在应用实例启动前作为独立发布步骤执行，
+不得依赖开发启动脚本。开发迁移命令 `db:migrate:dev` 会生成新迁移，只能在明确修改 Schema 时运行。
 
 ## 认证调用
 
@@ -66,13 +70,15 @@ API 的 `ready` 会验证配置和 PostgreSQL 连接；Worker 验证自身配置
 
 ## 阶段 4 异步 Generation
 
-启动 API 和 Worker 前先应用数据库迁移：
+通过根目录命令启动 API 和 Worker 时会自动应用数据库迁移：
 
 ```bash
-pnpm db:migrate:deploy
 pnpm dev:api
 pnpm dev:worker
 ```
+
+若在两个终端近乎同时执行这两个命令，Prisma 会用数据库迁移锁串行处理；推荐日常开发直接使用
+`pnpm dev`，只进行一次迁移检查后并行启动全部应用。
 
 API 创建 generation 后立即返回 `202 Accepted`。Outbox Dispatcher 会把任务可靠投递到 BullMQ，Worker 独立消费并写回 PostgreSQL。可以通过 `GET /api/v1/generations/:generationId` 轮询状态，通过 `POST /api/v1/generations/:generationId/cancel` 请求取消。
 

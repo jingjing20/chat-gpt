@@ -165,6 +165,7 @@ model Generation {
   @@unique([userId, idempotencyKey])
   @@index([userId, status, createdAt])
   @@index([conversationId, createdAt])
+  @@index([status, writerHeartbeatAt])
   @@map("generations")
 }
 

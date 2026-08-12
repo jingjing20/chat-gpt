@@ -289,7 +289,13 @@ export function ConversationView({
                       status={message.status}
                     />
                   ) : null}
-                  <SafeMarkdown content={message.content} />
+                  <SafeMarkdown
+                    content={message.content}
+                    streaming={
+                      message.status === 'STARTING' ||
+                      message.status === 'STREAMING'
+                    }
+                  />
                   {message.status === 'QUEUED' ||
                   message.status === 'PENDING' ||
                   message.status === 'STARTING' ||

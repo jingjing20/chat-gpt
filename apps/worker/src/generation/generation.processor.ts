@@ -22,6 +22,10 @@ import {
   GenerationReliabilityService,
   type GenerationPermit,
 } from './generation-reliability.service';
+import {
+  createConfiguredModelProfile,
+  fitMessagesToContextWindow,
+} from './context-window';
 
 const TERMINAL_STATUSES = [
   GenerationStatus.COMPLETED,
@@ -142,10 +146,24 @@ export class GenerationProcessor {
     }
     if (writerToken && generation.writerToken !== writerToken) return;
 
-    const messages = await this.loadContext(
+    const rawMessages = await this.loadContext(
       generation.conversationId,
       generation.responseMessageId,
     );
+    const modelProfile = createConfiguredModelProfile({
+      provider: generation.provider,
+      model: generation.model,
+      contextWindow: this.environment.LLM_CONTEXT_WINDOW,
+      maxOutputTokens: this.environment.LLM_MAX_OUTPUT_TOKENS,
+      reasoningEnabled: this.environment.LLM_REASONING_MODE === 'enabled',
+    });
+    const context = fitMessagesToContextWindow(rawMessages, modelProfile);
+    const messages = context.messages;
+    if (context.droppedMessageCount > 0) {
+      this.logger.log(
+        `上下文已裁剪 generationId=${generationId} droppedMessages=${context.droppedMessageCount} truncatedMessages=${context.truncatedMessageCount} estimatedInputTokens=${context.estimatedInputTokens}`,
+      );
+    }
     await this.prisma.generationAttempt.updateMany({
       where: { generationId, status: GenerationAttemptStatus.STARTED },
       data: {
@@ -301,7 +319,7 @@ export class GenerationProcessor {
           {
             model: generation.model,
             messages,
-            maxOutputTokens: this.environment.LLM_MAX_OUTPUT_TOKENS,
+            maxOutputTokens: modelProfile.maxOutputTokens,
             reasoning: {
               enabled: this.environment.LLM_REASONING_MODE === 'enabled',
               effort: this.environment.LLM_REASONING_EFFORT,

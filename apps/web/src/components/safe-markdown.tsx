@@ -1,4 +1,14 @@
-import { Children, isValidElement, type ReactNode } from 'react';
+'use client';
+
+import {
+  Children,
+  isValidElement,
+  memo,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
@@ -21,7 +31,40 @@ const sanitizeSchema = {
   },
 };
 
-export function SafeMarkdown({ content }: { content: string }) {
+const STREAM_RENDER_INTERVAL_MS = 120;
+
+export const SafeMarkdown = memo(function SafeMarkdown({
+  content,
+  streaming = false,
+}: {
+  content: string;
+  streaming?: boolean;
+}) {
+  const [throttledContent, setThrottledContent] = useState(content);
+  const latestContentRef = useRef(content);
+  const renderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    latestContentRef.current = content;
+    if (!streaming) {
+      if (renderTimerRef.current) clearTimeout(renderTimerRef.current);
+      renderTimerRef.current = null;
+      setThrottledContent(content);
+      return;
+    }
+    if (renderTimerRef.current) return;
+    renderTimerRef.current = setTimeout(() => {
+      setThrottledContent(latestContentRef.current);
+      renderTimerRef.current = null;
+    }, STREAM_RENDER_INTERVAL_MS);
+  }, [content, streaming]);
+  useEffect(
+    () => () => {
+      if (renderTimerRef.current) clearTimeout(renderTimerRef.current);
+    },
+    [],
+  );
+  const renderedContent = streaming ? throttledContent : content;
+
   return (
     <div className="markdown-content">
       <ReactMarkdown
@@ -67,8 +110,8 @@ export function SafeMarkdown({ content }: { content: string }) {
         remarkPlugins={[remarkGfm]}
         skipHtml
       >
-        {content}
+        {renderedContent}
       </ReactMarkdown>
     </div>
   );
-}
+});

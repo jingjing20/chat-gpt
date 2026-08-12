@@ -643,6 +643,8 @@ button:disabled {
   align-items: flex-start;
   flex-direction: column;
   padding: 15px 0;
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 180px;
 }
 
 .message-content {

@@ -57,6 +57,7 @@ export const workerEnvSchema = infrastructureSchema
     LLM_REASONING_MODE: z.enum(['enabled', 'disabled']).default('enabled'),
     LLM_REASONING_EFFORT: z.enum(['low', 'medium', 'high']).default('high'),
     LLM_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1).default(600_000),
+    LLM_CONTEXT_WINDOW: z.coerce.number().int().min(2).default(65_536),
     LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1).default(8192),
     LLM_USER_HASH_SECRET: z
       .string()
@@ -111,6 +112,13 @@ export const workerEnvSchema = infrastructureSchema
       .default(3072),
   })
   .superRefine((environment, context) => {
+    if (environment.LLM_MAX_OUTPUT_TOKENS >= environment.LLM_CONTEXT_WINDOW) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LLM_MAX_OUTPUT_TOKENS'],
+        message: '最大输出 token 必须小于模型上下文窗口',
+      });
+    }
     if (environment.NODE_ENV === 'production' && !environment.LLM_API_KEY) {
       context.addIssue({
         code: 'custom',

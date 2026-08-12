@@ -1,5 +1,6 @@
 import { redisConnectionOptions, type WorkerEnv } from '@chat/config';
 import { generationJobSchema, type GenerationJob } from '@chat/contracts';
+import { createTraceContext, metrics, runWithTrace } from '@chat/observability';
 import {
   Inject,
   Injectable,
@@ -29,7 +30,18 @@ export class GenerationWorkerService
       GENERATION_QUEUE_NAME,
       async (job) => {
         const payload = generationJobSchema.parse(job.data);
-        await this.processor.process(payload.generationId);
+        const startedAt = process.hrtime.bigint();
+        await runWithTrace(
+          createTraceContext({ generationId: payload.generationId }),
+          () => this.processor.process(payload.generationId),
+        );
+        metrics.increment('chat_generation_jobs_total', {
+          status: 'completed',
+        });
+        metrics.gauge(
+          'chat_generation_duration_seconds_last',
+          Number(process.hrtime.bigint() - startedAt) / 1_000_000_000,
+        );
       },
       {
         connection: redisConnectionOptions(this.environment.REDIS_URL),
@@ -38,6 +50,7 @@ export class GenerationWorkerService
       },
     );
     this.worker.on('failed', (job) => {
+      metrics.increment('chat_generation_jobs_total', { status: 'failed' });
       this.logger.error(
         `Generation Job 失败 generationId=${job?.id ?? 'unknown'}`,
       );

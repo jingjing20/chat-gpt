@@ -1,0 +1,21 @@
+{
+  "title": "并发聊天核心运行面板",
+  "panels": [
+    {
+      "title": "API 请求速率",
+      "query": "sum(rate(chat_http_requests_total[5m])) by (status)"
+    },
+    {
+      "title": "API 5xx 比例",
+      "query": "sum(rate(chat_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(chat_http_requests_total[5m]))"
+    },
+    {
+      "title": "Generation 结果",
+      "query": "sum(rate(chat_generation_jobs_total[5m])) by (status)"
+    },
+    {
+      "title": "最近 Generation 耗时",
+      "query": "chat_generation_duration_seconds_last"
+    }
+  ]
+}

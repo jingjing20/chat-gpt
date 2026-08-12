@@ -9,6 +9,8 @@ import { ProtectedResourceController } from './protected-resource.controller';
 import { GenerationsModule } from './generations/generations.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { EventsModule } from './events/events.module';
+import { MetricsController } from './observability/metrics.controller';
+import { ObservabilityMiddleware } from './observability/observability.middleware';
 
 @Module({
   imports: [
@@ -20,11 +22,15 @@ import { EventsModule } from './events/events.module';
     OutboxModule,
     EventsModule,
   ],
-  controllers: [HealthController, ProtectedResourceController],
+  controllers: [
+    HealthController,
+    ProtectedResourceController,
+    MetricsController,
+  ],
   providers: [],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware).forRoutes('*');
+    consumer.apply(RequestIdMiddleware, ObservabilityMiddleware).forRoutes('*');
   }
 }

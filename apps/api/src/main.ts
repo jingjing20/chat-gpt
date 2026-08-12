@@ -1,4 +1,5 @@
 import { readApiEnv } from '@chat/config';
+import { JsonLogger } from '@chat/observability';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { config as loadEnv } from 'dotenv';
@@ -12,7 +13,7 @@ async function bootstrap() {
     quiet: true,
   });
   const environment = readApiEnv(process.env);
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { logger: new JsonLogger() });
   app.enableShutdownHooks();
   configureApp(app);
 

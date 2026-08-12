@@ -1,0 +1,19 @@
+groups:
+  - name: concurrent-chat-slo
+    rules:
+      - alert: ApiHighErrorRate
+        expr: sum(rate(chat_http_requests_total{status=~"5.."}[5m])) / sum(rate(chat_http_requests_total[5m])) > 0.01
+        for: 10m
+        labels: { severity: page }
+        annotations: { summary: 'API 5xx 比例连续 10 分钟超过 1%' }
+      - alert: GenerationHighFailureRate
+        expr: sum(rate(chat_generation_jobs_total{status="failed"}[10m])) / sum(rate(chat_generation_jobs_total[10m])) > 0.05
+        for: 10m
+        labels: { severity: page }
+        annotations: { summary: 'Generation 失败比例连续 10 分钟超过 5%' }
+      - alert: GenerationWorkerSilent
+        expr: sum(rate(chat_generation_jobs_total[15m])) == 0
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          { summary: 'Worker 15 分钟没有消费任务；结合 outbox 和队列深度判断' }

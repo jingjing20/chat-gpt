@@ -1,11 +1,12 @@
 import { Logger } from '@nestjs/common';
+import { JsonLogger } from '@chat/observability';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { loadWorkerEnv } from './config/worker-config';
 
 async function bootstrap() {
   const environment = loadWorkerEnv();
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { logger: new JsonLogger() });
   app.enableShutdownHooks();
 
   await app.listen(environment.WORKER_HEALTH_PORT, '0.0.0.0');

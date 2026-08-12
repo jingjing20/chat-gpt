@@ -1,3 +1,6 @@
 # @chat/observability
 
-共享结构化日志、指标和链路追踪辅助能力将从阶段 1 开始逐步加入。
+共享结构化日志、内容脱敏、W3C Trace Context 和 Prometheus 文本指标实现。
+
+日志字段只允许标识符、长度、耗时、状态和安全错误码。`content`、`prompt`、
+`message`、Cookie、认证头、密码、密钥和 token 会被递归脱敏。

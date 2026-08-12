@@ -62,7 +62,12 @@ test('停止对话 A 的任务不影响对话 B', async ({ page }) => {
   await page.getByRole('link', { name: /停止目标 B/ }).click();
   await waitForConversation(page, '停止目标 B');
   await send(page, '保留 B');
-  await expect(page.getByText('这是实时流式回复。')).toBeVisible();
+  await expect(
+    page
+      .getByRole('article', { name: '助手回答' })
+      .last()
+      .getByText('这是实时流式回复。'),
+  ).toBeVisible();
 });
 
 async function register(page: import('@playwright/test').Page) {

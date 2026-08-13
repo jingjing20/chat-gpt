@@ -694,6 +694,43 @@ button:disabled {
   margin-bottom: 0;
 }
 
+.markdown-content p {
+  margin: 1em 0;
+}
+
+.markdown-content hr {
+  margin: 2em 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 1em 0;
+  padding-left: 18px;
+}
+
+.markdown-content ul {
+  list-style: disc;
+}
+
+.markdown-content ol {
+  list-style: decimal;
+}
+
+.markdown-content li + li {
+  margin-top: 0.375em;
+}
+
+.markdown-content li > p {
+  margin: 0;
+}
+
+.markdown-content li > ul,
+.markdown-content li > ol {
+  margin: 0.5em 0;
+}
+
 .markdown-content code {
   padding: 2px 5px;
   border-radius: 5px;

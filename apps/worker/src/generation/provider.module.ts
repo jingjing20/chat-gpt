@@ -31,15 +31,29 @@ export class ProviderModule {}
 /** 仅供自动化浏览器测试使用，禁止在开发或生产环境注入。 */
 class BrowserE2eProvider implements LlmProviderAdapter {
   async *streamChat(
-    _request: NormalizedChatRequest,
+    request: NormalizedChatRequest,
     signal?: AbortSignal,
   ): AsyncIterable<NormalizedLlmEvent> {
-    for (const event of [
-      { type: 'reasoning_delta', delta: '安全分析' } as const,
-      { type: 'content_delta', delta: '这是实时' } as const,
-      { type: 'content_delta', delta: '流式回复。' } as const,
-    ]) {
-      await new Promise((resolve) => setTimeout(resolve, 200));
+    const latestPrompt =
+      request.messages.findLast((message) => message.role === 'user')
+        ?.content ?? '';
+    const isBrowserStreamingRegression = /^浏览器长流式回归 [AB]$/.test(
+      latestPrompt,
+    );
+    const events: NormalizedLlmEvent[] = isBrowserStreamingRegression
+      ? Array.from({ length: 100 }, (_, index) => ({
+          type: 'content_delta' as const,
+          delta: `流式片段-${index + 1} ${'甲'.repeat(120)}`,
+        }))
+      : [
+          { type: 'reasoning_delta', delta: '安全分析' } as const,
+          { type: 'content_delta', delta: '这是实时' } as const,
+          { type: 'content_delta', delta: '流式回复。' } as const,
+        ];
+    for (const event of events) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, isBrowserStreamingRegression ? 20 : 200),
+      );
       if (signal?.aborted) throw signal.reason;
       yield event;
     }

@@ -33,6 +33,7 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 import { ArrowUp, Square } from 'lucide-react';
 import { AnswerActions } from './answer-actions';
+import { isViewportNearBottom } from '@/lib/scroll-follow';
 
 export function ConversationView({
   conversationId,
@@ -44,6 +45,7 @@ export function ConversationView({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const restoredConversationRef = useRef<string | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shouldFollowStreamingRef = useRef(true);
   const content = useGenerationStore(
     (state) => state.drafts[conversationId] ?? '',
   );
@@ -134,7 +136,10 @@ export function ConversationView({
       ]);
       requestAnimationFrame(() => {
         const viewport = viewportRef.current;
-        if (viewport) viewport.scrollTop = viewport.scrollHeight;
+        if (viewport) {
+          shouldFollowStreamingRef.current = true;
+          viewport.scrollTop = viewport.scrollHeight;
+        }
       });
     },
   });
@@ -186,12 +191,15 @@ export function ConversationView({
     }
     restoredConversationRef.current = conversationId;
     viewport.scrollTop = detailQuery.data.scrollOffset;
+    shouldFollowStreamingRef.current = isViewportNearBottom(viewport);
   }, [conversationId, detailQuery.data, messagesQuery.isPending]);
 
   useLayoutEffect(() => {
     if (!streamingSignature) return;
     const viewport = viewportRef.current;
-    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    if (viewport && shouldFollowStreamingRef.current) {
+      viewport.scrollTop = viewport.scrollHeight;
+    }
   }, [messages.length, streamingSignature]);
 
   useLayoutEffect(() => {
@@ -215,6 +223,10 @@ export function ConversationView({
   }, [conversationId]);
 
   function handleScroll() {
+    const viewport = viewportRef.current;
+    if (viewport) {
+      shouldFollowStreamingRef.current = isViewportNearBottom(viewport);
+    }
     if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
     scrollTimerRef.current = setTimeout(() => {
       const scrollOffset = Math.max(
@@ -289,13 +301,7 @@ export function ConversationView({
                       status={message.status}
                     />
                   ) : null}
-                  <SafeMarkdown
-                    content={message.content}
-                    streaming={
-                      message.status === 'STARTING' ||
-                      message.status === 'STREAMING'
-                    }
-                  />
+                  <SafeMarkdown content={message.content} />
                   {message.status === 'QUEUED' ||
                   message.status === 'PENDING' ||
                   message.status === 'STARTING' ||

@@ -2,6 +2,91 @@ import { expect, test } from '@playwright/test';
 
 const raceIterations = Number(process.env.PHASE_6_RACE_ITERATIONS ?? 20);
 
+test('切回并发对话后正文继续流式增长且状态圆点保留', async ({ page }) => {
+  await register(page);
+  const conversationA = await createNamedConversation(
+    page,
+    '这是一个非常长的侧边栏标题用于验证生成状态圆点不会被标题文本挤出可视区域 A',
+  );
+  const conversationB = await createNamedConversation(page, '长流式回归 B');
+
+  const linkA = page.locator(`a[href="/chat/${conversationA}"]`);
+  const linkB = page.locator(`a[href="/chat/${conversationB}"]`);
+  await linkA.click();
+  await waitForConversation(
+    page,
+    '这是一个非常长的侧边栏标题用于验证生成状态圆点不会被标题文本挤出可视区域 A',
+  );
+  await send(page, '浏览器长流式回归 A');
+  await linkB.click();
+  await waitForConversation(page, '长流式回归 B');
+  await send(page, '浏览器长流式回归 B');
+
+  await expect(page.getByLabel('正在生成')).toHaveCount(2);
+  const titleA = linkA.locator('.conversation-link-title-text');
+  const dotA = linkA.getByLabel('正在生成');
+  expect(
+    await titleA.evaluate(
+      (element) => element.scrollWidth > element.clientWidth,
+    ),
+  ).toBe(true);
+  expect(
+    await dotA.evaluate((element) => {
+      const dot = element.getBoundingClientRect();
+      const link = element.closest('a')?.getBoundingClientRect();
+      return Boolean(
+        link &&
+        dot.width > 0 &&
+        dot.left >= link.left &&
+        dot.right <= link.right,
+      );
+    }),
+  ).toBe(true);
+
+  await linkA.click();
+  await waitForConversation(
+    page,
+    '这是一个非常长的侧边栏标题用于验证生成状态圆点不会被标题文本挤出可视区域 A',
+  );
+  const answer = page.getByRole('article', { name: '助手回答' }).last();
+  const initialLength = (await answer.textContent())?.length ?? 0;
+  await page.waitForTimeout(500);
+  expect((await answer.textContent())?.length ?? 0).toBeGreaterThan(
+    initialLength,
+  );
+  await expect(page.getByLabel('正在生成')).toHaveCount(2);
+
+  const viewport = page.locator('.message-viewport');
+  await expect
+    .poll(() =>
+      viewport.evaluate(
+        (element) => element.scrollHeight > element.clientHeight,
+      ),
+    )
+    .toBe(true);
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+    element.dispatchEvent(new Event('scroll'));
+  });
+  const contentBeforeManualScroll = (await answer.textContent())?.length ?? 0;
+  await page.waitForTimeout(300);
+  expect((await answer.textContent())?.length ?? 0).toBeGreaterThan(
+    contentBeforeManualScroll,
+  );
+  expect(
+    await viewport.evaluate(
+      (element) =>
+        element.scrollHeight - element.clientHeight - element.scrollTop,
+    ),
+  ).toBeGreaterThan(48);
+
+  await page.getByRole('button', { name: '停止生成' }).click();
+  await linkB.click();
+  await waitForConversation(page, '长流式回归 B');
+  await page.getByRole('button', { name: '停止生成' }).click();
+  await expect(page.getByLabel('正在生成')).toHaveCount(0, { timeout: 5000 });
+});
+
 test('两个对话并发、路由切换复用连接且内容独立完成', async ({ page }) => {
   let eventConnections = 0;
   page.on('request', (request) => {

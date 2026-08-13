@@ -29,7 +29,9 @@ export function ConversationNavLink({
     >
       <Link className="conversation-link" href={`/chat/${conversation.id}`}>
         <span className="conversation-link-title">
-          {conversation.title}
+          <span className="conversation-link-title-text">
+            {conversation.title}
+          </span>
           {isGenerating ? (
             <i aria-label="正在生成" className="generation-dot" />
           ) : conversation.hasUnread && !isActive ? (

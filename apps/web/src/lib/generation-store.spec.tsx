@@ -6,6 +6,7 @@ import {
   reduceGenerationEvent,
   selectConversationActivity,
 } from './generation-store';
+import { isViewportNearBottom } from './scroll-follow';
 
 function event(sequence: number, delta = '甲'): UserEvent {
   return {
@@ -81,4 +82,23 @@ test('对话活动 selector 只汇总目标对话的活动任务', () => {
   assert.equal(result.activeCount, 1);
   assert.equal(isGenerationActive('CANCEL_REQUESTED'), true);
   assert.equal(isGenerationActive('COMPLETED'), false);
+});
+
+test('仅在视口贴近底部时保持自动滚动', () => {
+  assert.equal(
+    isViewportNearBottom({
+      clientHeight: 600,
+      scrollHeight: 1200,
+      scrollTop: 600,
+    }),
+    true,
+  );
+  assert.equal(
+    isViewportNearBottom({
+      clientHeight: 600,
+      scrollHeight: 1200,
+      scrollTop: 551,
+    }),
+    false,
+  );
 });

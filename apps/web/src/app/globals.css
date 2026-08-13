@@ -330,12 +330,21 @@ button:disabled {
 .conversation-link-title {
   display: flex;
   min-width: 0;
+  flex: 1;
   align-items: center;
   gap: 7px;
 }
 
+.conversation-link-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .generation-dot,
 .unread-dot {
+  display: block;
   width: 7px;
   height: 7px;
   flex: 0 0 auto;

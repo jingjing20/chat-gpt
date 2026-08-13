@@ -53,7 +53,7 @@ function ReasoningPanelState({
         <span>{isActive ? '正在思考' : '推理过程'}</span>
       </Collapsible.Trigger>
       <Collapsible.Panel className="reasoning-panel">
-        <SafeMarkdown content={content} streaming={isActive} />
+        <SafeMarkdown content={content} />
       </Collapsible.Panel>
     </Collapsible.Root>
   );

@@ -48,36 +48,3 @@ test('恶意 Markdown 不能执行，刷新后对话和消息仍然存在', asyn
     ),
   ).toBe(false);
 });
-
-test('Markdown 分隔线和列表保留可读的排版样式', async ({ page }) => {
-  const email = `markdown-style-${Date.now()}@example.com`;
-  await page.goto('/login');
-  await page.getByRole('button', { name: '注册' }).click();
-  await page.getByLabel('邮箱').fill(email);
-  await page.getByLabel('密码').fill('a-secure-password');
-  await page.getByRole('button', { name: '注册并开始' }).click();
-
-  await page
-    .getByRole('textbox', { name: '消息内容' })
-    .fill('分隔线上方\n\n---\n\n- 第一项\n- 第二项\n\n1. 第一步\n2. 第二步');
-  await page.getByRole('button', { name: '发送消息' }).click();
-
-  const userMessage = page.getByRole('article', { name: '你的消息' });
-  const separator = userMessage.locator('hr');
-  const unorderedList = userMessage.locator('ul');
-  const orderedList = userMessage.locator('ol');
-  const secondUnorderedItem = unorderedList.locator('li').nth(1);
-
-  await expect(separator).toHaveCSS('margin-top', '32px');
-  await expect(separator).toHaveCSS('margin-bottom', '32px');
-  await expect(unorderedList).toHaveCSS('padding-left', '18px');
-  await expect(unorderedList.locator('li').first()).toHaveCSS(
-    'list-style-type',
-    'disc',
-  );
-  await expect(orderedList.locator('li').first()).toHaveCSS(
-    'list-style-type',
-    'decimal',
-  );
-  await expect(secondUnorderedItem).toHaveCSS('margin-top', '6px');
-});

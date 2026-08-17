@@ -6,7 +6,10 @@ import {
   reduceGenerationEvent,
   selectConversationActivity,
 } from './generation-store';
-import { isViewportNearBottom } from './scroll-follow';
+import {
+  isViewportNearBottom,
+  shouldShowScrollToBottom,
+} from './scroll-follow';
 
 function event(sequence: number, delta = '甲'): UserEvent {
   return {
@@ -98,6 +101,25 @@ test('仅在视口贴近底部时保持自动滚动', () => {
       clientHeight: 600,
       scrollHeight: 1200,
       scrollTop: 551,
+    }),
+    false,
+  );
+});
+
+test('仅在明显离开底部后显示回到底部按钮', () => {
+  assert.equal(
+    shouldShowScrollToBottom({
+      clientHeight: 600,
+      scrollHeight: 1200,
+      scrollTop: 479,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldShowScrollToBottom({
+      clientHeight: 600,
+      scrollHeight: 1200,
+      scrollTop: 500,
     }),
     false,
   );

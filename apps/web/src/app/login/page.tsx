@@ -41,7 +41,7 @@ export default function LoginPage() {
   return (
     <main className="auth-page">
       <section className="auth-intro">
-        <p className="brand-mark">CONCURRENT CHAT</p>
+        <p className="brand-mark">LUCIDRA</p>
         <h1>把每段思考，留在自己的空间里。</h1>
         <p>阶段 2 已支持安全登录、持久化对话、消息分页和严格的用户数据隔离。</p>
       </section>

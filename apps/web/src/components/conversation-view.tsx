@@ -21,6 +21,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type FormEvent,
 } from 'react';
 import { SafeMarkdown } from './safe-markdown';
@@ -31,9 +32,12 @@ import {
   useGenerationStore,
 } from '@/lib/generation-store';
 import { useShallow } from 'zustand/react/shallow';
-import { ArrowUp, Square } from 'lucide-react';
+import { ArrowDown, ArrowUp, Square } from 'lucide-react';
 import { AnswerActions } from './answer-actions';
-import { isViewportNearBottom } from '@/lib/scroll-follow';
+import {
+  isViewportNearBottom,
+  shouldShowScrollToBottom,
+} from '@/lib/scroll-follow';
 
 export function ConversationView({
   conversationId,
@@ -46,6 +50,7 @@ export function ConversationView({
   const restoredConversationRef = useRef<string | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldFollowStreamingRef = useRef(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const content = useGenerationStore(
     (state) => state.drafts[conversationId] ?? '',
   );
@@ -192,6 +197,7 @@ export function ConversationView({
     restoredConversationRef.current = conversationId;
     viewport.scrollTop = detailQuery.data.scrollOffset;
     shouldFollowStreamingRef.current = isViewportNearBottom(viewport);
+    setShowScrollToBottom(shouldShowScrollToBottom(viewport));
   }, [conversationId, detailQuery.data, messagesQuery.isPending]);
 
   useLayoutEffect(() => {
@@ -199,6 +205,8 @@ export function ConversationView({
     const viewport = viewportRef.current;
     if (viewport && shouldFollowStreamingRef.current) {
       viewport.scrollTop = viewport.scrollHeight;
+    } else if (viewport) {
+      setShowScrollToBottom(shouldShowScrollToBottom(viewport));
     }
   }, [messages.length, streamingSignature]);
 
@@ -226,6 +234,7 @@ export function ConversationView({
     const viewport = viewportRef.current;
     if (viewport) {
       shouldFollowStreamingRef.current = isViewportNearBottom(viewport);
+      setShowScrollToBottom(shouldShowScrollToBottom(viewport));
     }
     if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
     scrollTimerRef.current = setTimeout(() => {
@@ -379,6 +388,23 @@ export function ConversationView({
           </div>
         )}
       </div>
+      <button
+        aria-label="回到最新消息"
+        className={
+          showScrollToBottom ? 'scroll-to-bottom visible' : 'scroll-to-bottom'
+        }
+        onClick={() => {
+          const viewport = viewportRef.current;
+          if (!viewport) return;
+          shouldFollowStreamingRef.current = true;
+          viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+        }}
+        tabIndex={showScrollToBottom ? 0 : -1}
+        title="回到最新消息"
+        type="button"
+      >
+        <ArrowDown aria-hidden="true" size={18} />
+      </button>
       <form className="composer" onSubmit={submit}>
         {composerStatus ? (
           <div className="composer-status" aria-live="polite">

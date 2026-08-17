@@ -9,11 +9,17 @@ import {
 import { queryKeys } from '@/lib/query-keys';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useGenerationStore } from '@/lib/generation-store';
 import { ConversationNavLink } from './conversation-nav-link';
-import { MessageSquarePlus } from 'lucide-react';
+import {
+  LogOut,
+  MessageSquarePlus,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
 import type { ConversationResponse } from '@chat/contracts';
 
 function conversationGroup(dateValue: string) {
@@ -42,6 +48,7 @@ export function ChatShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const params = useParams<{ conversationId?: string }>();
   const queryClient = useQueryClient();
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const userQuery = useQuery({
     queryKey: queryKeys.currentUser,
     queryFn: getCurrentUser,
@@ -71,13 +78,37 @@ export function ChatShell({ children }: { children: ReactNode }) {
   if (userQuery.isError) return null;
 
   return (
-    <main className="chat-shell">
+    <main
+      className={
+        isSidebarCollapsed ? 'chat-shell sidebar-collapsed' : 'chat-shell'
+      }
+    >
       <aside className="sidebar">
         <div className="sidebar-heading">
-          <Link href="/chat" className="brand-link">
-            <span className="brand-orb" aria-hidden="true" />
-            Concurrent
+          <Link href="/chat" className="brand-link" title="Lucidra">
+            <Image
+              alt=""
+              className="brand-logo"
+              height={27}
+              priority
+              src="/lucidra-mark.svg"
+              width={27}
+            />
+            <span className="brand-name">Lucidra</span>
           </Link>
+          <button
+            aria-label={isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+            className="sidebar-toggle"
+            onClick={() => setIsSidebarCollapsed((collapsed) => !collapsed)}
+            title={isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+            type="button"
+          >
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen aria-hidden="true" size={18} />
+            ) : (
+              <PanelLeftClose aria-hidden="true" size={18} />
+            )}
+          </button>
         </div>
         <button
           className="new-conversation-button"
@@ -85,7 +116,7 @@ export function ChatShell({ children }: { children: ReactNode }) {
           type="button"
         >
           <MessageSquarePlus aria-hidden="true" size={16} />
-          新建对话
+          <span>新建对话</span>
         </button>
         <nav className="conversation-nav" aria-label="对话列表">
           {groupConversations(conversationsQuery.data?.items ?? []).map(
@@ -107,20 +138,25 @@ export function ChatShell({ children }: { children: ReactNode }) {
             <p className="empty-nav">还没有对话，从首页输入一个问题开始。</p>
           ) : null}
         </nav>
-        <div className="account-row">
-          <div>
+        <div className="account-row" title={userQuery.data.email}>
+          <div className="account-identity">
             <span className="avatar">
               {userQuery.data.email[0]?.toUpperCase()}
             </span>
-            <span className="account-email">{userQuery.data.email}</span>
+            <span className="account-name">
+              {userQuery.data.email.split('@')[0]}
+            </span>
           </div>
           <button
-            className="text-button"
+            aria-label="退出登录"
+            className="logout-button"
             disabled={logoutMutation.isPending}
             onClick={() => logoutMutation.mutate()}
+            title="退出登录"
             type="button"
           >
-            退出
+            <LogOut aria-hidden="true" size={16} />
+            <span>{logoutMutation.isPending ? '正在退出…' : '退出登录'}</span>
           </button>
         </div>
       </aside>

@@ -4,7 +4,7 @@ import { GenerationManagerHost } from '@/components/generation-manager-host';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Concurrent Chat',
+  title: 'Lucidra',
   description: '支持多用户隔离的并发聊天应用。',
 };
 

@@ -17,6 +17,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -49,6 +50,8 @@ export function ConversationView({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const restoredConversationRef = useRef<string | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ignoredProgrammaticScrollOffsetRef = useRef<number | null>(null);
+  const persistedScrollOffsetRef = useRef<number | null>(null);
   const shouldFollowStreamingRef = useRef(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const content = useGenerationStore(
@@ -103,6 +106,14 @@ export function ConversationView({
           : message;
       });
   }, [messagesQuery.data, overlays]);
+  const persistScrollPosition = useCallback(
+    (scrollOffset: number) => {
+      if (persistedScrollOffsetRef.current === scrollOffset) return;
+      persistedScrollOffsetRef.current = scrollOffset;
+      void saveScrollPosition(conversationId, scrollOffset);
+    },
+    [conversationId],
+  );
   const sendMutation = useMutation({
     mutationFn: (message: string) => createGeneration(conversationId, message),
     onMutate: (message) => {
@@ -196,6 +207,11 @@ export function ConversationView({
     }
     restoredConversationRef.current = conversationId;
     viewport.scrollTop = detailQuery.data.scrollOffset;
+    ignoredProgrammaticScrollOffsetRef.current = Math.max(
+      0,
+      Math.round(viewport.scrollTop),
+    );
+    persistedScrollOffsetRef.current = detailQuery.data.scrollOffset;
     shouldFollowStreamingRef.current = isViewportNearBottom(viewport);
     setShowScrollToBottom(shouldShowScrollToBottom(viewport));
   }, [conversationId, detailQuery.data, messagesQuery.isPending]);
@@ -205,6 +221,10 @@ export function ConversationView({
     const viewport = viewportRef.current;
     if (viewport && shouldFollowStreamingRef.current) {
       viewport.scrollTop = viewport.scrollHeight;
+      ignoredProgrammaticScrollOffsetRef.current = Math.max(
+        0,
+        Math.round(viewport.scrollTop),
+      );
     } else if (viewport) {
       setShowScrollToBottom(shouldShowScrollToBottom(viewport));
     }
@@ -222,13 +242,10 @@ export function ConversationView({
     return () => {
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
       if (viewport) {
-        void saveScrollPosition(
-          conversationId,
-          Math.max(0, Math.round(viewport.scrollTop)),
-        );
+        persistScrollPosition(Math.max(0, Math.round(viewport.scrollTop)));
       }
     };
-  }, [conversationId]);
+  }, [conversationId, persistScrollPosition]);
 
   function handleScroll() {
     const viewport = viewportRef.current;
@@ -236,13 +253,18 @@ export function ConversationView({
       shouldFollowStreamingRef.current = isViewportNearBottom(viewport);
       setShowScrollToBottom(shouldShowScrollToBottom(viewport));
     }
+    const scrollOffset = Math.max(
+      0,
+      Math.round(viewportRef.current?.scrollTop ?? 0),
+    );
+    if (ignoredProgrammaticScrollOffsetRef.current === scrollOffset) {
+      ignoredProgrammaticScrollOffsetRef.current = null;
+      return;
+    }
+    ignoredProgrammaticScrollOffsetRef.current = null;
     if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
     scrollTimerRef.current = setTimeout(() => {
-      const scrollOffset = Math.max(
-        0,
-        Math.round(viewportRef.current?.scrollTop ?? 0),
-      );
-      void saveScrollPosition(conversationId, scrollOffset);
+      persistScrollPosition(scrollOffset);
     }, 250);
   }
 

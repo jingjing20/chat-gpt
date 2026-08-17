@@ -2,6 +2,31 @@ import { expect, test } from '@playwright/test';
 
 const raceIterations = Number(process.env.PHASE_6_RACE_ITERATIONS ?? 20);
 
+test('流式自动跟随不保存滚动位置，用户主动滚动才保存', async ({ page }) => {
+  const scrollPositionRequests: number[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('/scroll-position')) {
+      scrollPositionRequests.push(Date.now());
+    }
+  });
+
+  await register(page);
+  await createNamedConversation(page, '滚动位置写入回归');
+  await expect(page.getByText('生成中…')).toHaveCount(0, { timeout: 5000 });
+  scrollPositionRequests.length = 0;
+
+  await send(page, '浏览器长流式回归 A');
+  await expect(page.getByText('生成中…')).toHaveCount(0, { timeout: 5000 });
+  expect(scrollPositionRequests).toHaveLength(0);
+
+  const viewport = page.locator('.message-viewport');
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+    element.dispatchEvent(new Event('scroll'));
+  });
+  await expect.poll(() => scrollPositionRequests.length).toBe(1);
+});
+
 test('切回并发对话后正文继续流式增长且状态圆点保留', async ({ page }) => {
   await register(page);
   const conversationA = await createNamedConversation(

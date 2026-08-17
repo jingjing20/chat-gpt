@@ -20,11 +20,29 @@ test('流式自动跟随不保存滚动位置，用户主动滚动才保存', as
   expect(scrollPositionRequests).toHaveLength(0);
 
   const viewport = page.locator('.message-viewport');
-  await viewport.evaluate((element) => {
-    element.scrollTop = 0;
+  const expectedScrollOffset = await viewport.evaluate((element) => {
+    const scrollOffset = Math.round(
+      (element.scrollHeight - element.clientHeight) / 2,
+    );
+    element.scrollTop = scrollOffset;
     element.dispatchEvent(new Event('scroll'));
+    return Math.round(element.scrollTop);
   });
   await expect.poll(() => scrollPositionRequests.length).toBe(1);
+
+  await page.getByRole('button', { name: '新建对话' }).click();
+  await page.getByRole('link', { name: /滚动位置写入回归/ }).click();
+  await waitForConversation(page, '滚动位置写入回归');
+  await expect
+    .poll(() => viewport.evaluate((element) => Math.round(element.scrollTop)))
+    .toBe(expectedScrollOffset);
+
+  await page.getByRole('button', { name: '新建对话' }).click();
+  await page.getByRole('link', { name: /滚动位置写入回归/ }).click();
+  await waitForConversation(page, '滚动位置写入回归');
+  await expect
+    .poll(() => viewport.evaluate((element) => Math.round(element.scrollTop)))
+    .toBe(expectedScrollOffset);
 });
 
 test('切回并发对话后正文继续流式增长且状态圆点保留', async ({ page }) => {

@@ -39,6 +39,7 @@ import {
   isViewportNearBottom,
   shouldShowScrollToBottom,
 } from '@/lib/scroll-follow';
+import type { ConversationResponse } from '@chat/contracts';
 
 export function ConversationView({
   conversationId,
@@ -50,6 +51,9 @@ export function ConversationView({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const restoredConversationRef = useRef<string | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingScrollOffsetRef = useRef<number | null>(null);
+  const restorationFrameRef = useRef<number | null>(null);
+  const restorationPendingRef = useRef(false);
   const ignoredProgrammaticScrollOffsetRef = useRef<number | null>(null);
   const persistedScrollOffsetRef = useRef<number | null>(null);
   const shouldFollowStreamingRef = useRef(true);
@@ -109,10 +113,25 @@ export function ConversationView({
   const persistScrollPosition = useCallback(
     (scrollOffset: number) => {
       if (persistedScrollOffsetRef.current === scrollOffset) return;
+      const queryKey = queryKeys.conversations.detail(conversationId);
+      const previousConversation =
+        queryClient.getQueryData<ConversationResponse>(queryKey);
+      const previousScrollOffset = persistedScrollOffsetRef.current;
       persistedScrollOffsetRef.current = scrollOffset;
-      void saveScrollPosition(conversationId, scrollOffset);
+      queryClient.setQueryData<ConversationResponse>(
+        queryKey,
+        (conversation) =>
+          conversation ? { ...conversation, scrollOffset } : conversation,
+      );
+      void saveScrollPosition(conversationId, scrollOffset).catch(() => {
+        const currentConversation =
+          queryClient.getQueryData<ConversationResponse>(queryKey);
+        if (currentConversation?.scrollOffset !== scrollOffset) return;
+        persistedScrollOffsetRef.current = previousScrollOffset;
+        queryClient.setQueryData(queryKey, previousConversation);
+      });
     },
-    [conversationId],
+    [conversationId, queryClient],
   );
   const sendMutation = useMutation({
     mutationFn: (message: string) => createGeneration(conversationId, message),
@@ -185,9 +204,13 @@ export function ConversationView({
         : sendMutationErrorMessage();
   useEffect(() => {
     void markConversationRead(conversationId).then((conversation) => {
-      queryClient.setQueryData(
+      queryClient.setQueryData<ConversationResponse>(
         queryKeys.conversations.detail(conversationId),
-        conversation,
+        (currentConversation) => ({
+          ...conversation,
+          scrollOffset:
+            currentConversation?.scrollOffset ?? conversation.scrollOffset,
+        }),
       );
       void queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.all,
@@ -205,15 +228,34 @@ export function ConversationView({
     ) {
       return;
     }
-    restoredConversationRef.current = conversationId;
-    viewport.scrollTop = detailQuery.data.scrollOffset;
-    ignoredProgrammaticScrollOffsetRef.current = Math.max(
-      0,
-      Math.round(viewport.scrollTop),
-    );
-    persistedScrollOffsetRef.current = detailQuery.data.scrollOffset;
-    shouldFollowStreamingRef.current = isViewportNearBottom(viewport);
-    setShowScrollToBottom(shouldShowScrollToBottom(viewport));
+    const targetScrollOffset = detailQuery.data.scrollOffset;
+    let attempts = 0;
+    restorationPendingRef.current = true;
+    persistedScrollOffsetRef.current = targetScrollOffset;
+
+    const restore = () => {
+      viewport.scrollTop = targetScrollOffset;
+      const actualScrollOffset = Math.max(0, Math.round(viewport.scrollTop));
+      ignoredProgrammaticScrollOffsetRef.current = actualScrollOffset;
+      attempts += 1;
+      if (actualScrollOffset === targetScrollOffset || attempts >= 180) {
+        restoredConversationRef.current = conversationId;
+        restorationPendingRef.current = false;
+        restorationFrameRef.current = null;
+        shouldFollowStreamingRef.current = isViewportNearBottom(viewport);
+        setShowScrollToBottom(shouldShowScrollToBottom(viewport));
+        return;
+      }
+      restorationFrameRef.current = requestAnimationFrame(restore);
+    };
+
+    restore();
+    return () => {
+      if (restorationFrameRef.current !== null) {
+        cancelAnimationFrame(restorationFrameRef.current);
+        restorationFrameRef.current = null;
+      }
+    };
   }, [conversationId, detailQuery.data, messagesQuery.isPending]);
 
   useLayoutEffect(() => {
@@ -238,12 +280,15 @@ export function ConversationView({
   }, [content]);
 
   useEffect(() => {
-    const viewport = viewportRef.current;
     return () => {
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-      if (viewport) {
-        persistScrollPosition(Math.max(0, Math.round(viewport.scrollTop)));
+      if (
+        pendingScrollOffsetRef.current !== null &&
+        !restorationPendingRef.current
+      ) {
+        persistScrollPosition(pendingScrollOffsetRef.current);
       }
+      pendingScrollOffsetRef.current = null;
     };
   }, [conversationId, persistScrollPosition]);
 
@@ -262,8 +307,18 @@ export function ConversationView({
       return;
     }
     ignoredProgrammaticScrollOffsetRef.current = null;
+    if (restorationPendingRef.current) {
+      restorationPendingRef.current = false;
+      restoredConversationRef.current = conversationId;
+      if (restorationFrameRef.current !== null) {
+        cancelAnimationFrame(restorationFrameRef.current);
+        restorationFrameRef.current = null;
+      }
+    }
     if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    pendingScrollOffsetRef.current = scrollOffset;
     scrollTimerRef.current = setTimeout(() => {
+      pendingScrollOffsetRef.current = null;
       persistScrollPosition(scrollOffset);
     }, 250);
   }

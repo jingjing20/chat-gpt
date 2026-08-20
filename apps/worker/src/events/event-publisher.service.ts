@@ -3,6 +3,7 @@ import type { GenerationEventType, UserEvent } from '@chat/contracts';
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import Redis from 'ioredis';
 import { randomUUID } from 'node:crypto';
+import { metrics } from '@chat/observability';
 import { WORKER_ENV } from '../config/worker-config';
 import { eventKeys } from './event-keys';
 
@@ -44,6 +45,12 @@ export class EventPublisherService implements OnApplicationShutdown {
 
   constructor(@Inject(WORKER_ENV) environment: WorkerEnv) {
     this.redis = new Redis(redisConnectionOptions(environment.REDIS_URL));
+    this.redis.on('error', () => {
+      metrics.increment('chat_redis_client_errors_total', {
+        service: 'worker',
+        component: 'event_publisher',
+      });
+    });
     this.prefix = environment.EVENT_KEY_PREFIX;
     this.retentionMs = environment.EVENT_RETENTION_MS;
   }
@@ -97,6 +104,7 @@ export class EventPublisherService implements OnApplicationShutdown {
   }
 
   async onApplicationShutdown(): Promise<void> {
-    await this.redis.quit();
+    if (this.redis.status === 'ready') await this.redis.quit();
+    else this.redis.disconnect();
   }
 }

@@ -3,9 +3,9 @@ import { expect, test } from '@playwright/test';
 test('恶意 Markdown 不能执行，刷新后对话和消息仍然存在', async ({ page }) => {
   const email = `xss-${Date.now()}@example.com`;
   await page.goto('/login');
-  await page.getByRole('button', { name: '注册' }).click();
+  await page.getByRole('tab', { name: '注册' }).click();
   await page.getByLabel('邮箱').fill(email);
-  await page.getByLabel('密码').fill('a-secure-password');
+  await page.getByRole('textbox', { name: /^密码/ }).fill('a-secure-password');
   await page.getByRole('button', { name: '创建账户' }).click();
   await expect(page).toHaveURL(/\/chat$/);
 

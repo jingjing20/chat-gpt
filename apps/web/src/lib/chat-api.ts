@@ -162,6 +162,15 @@ export async function cancelGeneration(
   );
 }
 
+export async function retryGeneration(generationId: string) {
+  return createGenerationResponseSchema.parse(
+    await apiRequest(`/generations/${generationId}/retry`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
+    }),
+  );
+}
+
 export async function syncGenerations() {
   return generationSyncResponseSchema.parse(await apiRequest('/sync'));
 }

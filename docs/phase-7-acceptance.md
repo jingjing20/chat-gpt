@@ -62,16 +62,16 @@ pnpm test:e2e      通过
 
 其中 API E2E 为 3 个套件、14 项测试，Worker E2E 为 3 个套件、7 项测试，Web Playwright 为 3 项测试。Worker E2E 另连续执行三次，用于确认取消与 checkpoint 场景没有竞态失败。自动化测试使用测试供应商，不会调用 DeepSeek 或 OpenAI。
 
-## 验收结论与剩余证据
+## 补充专项验收结论
 
 当前实现和自动化测试已经证明 sequence 幂等归并、缺口暂停、精确补偿、快照替换、周期 checkpoint、Redis 有限保留、最终 PostgreSQL 持久化和 SSE 无缓冲响应头。
 
-以下计划门槛尚缺专门的自动化测量，不能仅凭现有回归测试宣称完成：
+2026-08-20 已补齐原验收记录中缺少的专项证据：
 
-- 模拟 Redis 事件实际过期后，端到端验证 snapshot fallback；
-- 两个独立浏览器标签同时观察同一活动 generation，并比较最终内容 hash；
-- 人为断开并恢复 SSE 网络连接，验证持久游标无重复、无遗漏；
-- 采集刷新恢复耗时样本并计算 p95，与项目 SLO 对比；
-- 在实际部署的反向代理后验证 SSE 数据不会被缓冲。
+- Redis 事件实际过期后，Redis snapshot 与 PostgreSQL checkpoint 两级 fallback 均通过 API E2E；
+- 两个独立浏览器 Context 的最终内容 hash 一致，跨 Context 取消后状态收敛；
+- 浏览器强制断网并恢复后，100 个增量无重复、无遗漏；
+- 活动 generation 刷新恢复 p95 小于 2 秒；
+- Playwright 经 Next.js 反向代理实时接收长流式增量，服务端同时设置 `X-Accel-Buffering: no` 与 `no-transform`。
 
-因此，阶段 7 的恢复实现已交付并通过现有全量门禁；在上述专项测试和性能数据补齐前，验收状态应记录为“功能完成，专项恢复证据待补齐”，不应标记为最终关闭。
+完整命令、样本和阶段 8～10 的衔接结果记录在 `docs/phase-7-10-acceptance.md`。因此阶段 7 的计划门槛已经关闭；生产入口代理的同类冒烟测试仍属于阶段 11。

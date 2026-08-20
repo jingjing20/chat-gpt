@@ -1,6 +1,7 @@
 import type { ApiEnv } from '@chat/config';
 import { generationJobSchema, type GenerationJob } from '@chat/contracts';
 import { Prisma } from '@chat/database';
+import { metrics } from '@chat/observability';
 import {
   Inject,
   Injectable,
@@ -85,8 +86,13 @@ export class OutboxDispatcherService
               jobId: parsed.data.generationId,
               attempts: 5,
               backoff: { type: 'exponential', delay: 500 },
-              removeOnComplete: false,
-              removeOnFail: false,
+              removeOnComplete: {
+                count:
+                  this.environment.GENERATION_QUEUE_COMPLETED_RETENTION_COUNT,
+              },
+              removeOnFail: {
+                count: this.environment.GENERATION_QUEUE_FAILED_RETENTION_COUNT,
+              },
             });
             await transaction.outboxEvent.update({
               where: { id: row.id },
@@ -108,6 +114,24 @@ export class OutboxDispatcherService
             this.logger.warn(`Outbox 投递失败 eventId=${row.id}`);
           }
         }
+        const [unpublishedCount, oldest] = await Promise.all([
+          transaction.outboxEvent.count({ where: { publishedAt: null } }),
+          transaction.outboxEvent.findFirst({
+            where: { publishedAt: null },
+            orderBy: { createdAt: 'asc' },
+            select: { createdAt: true },
+          }),
+        ]);
+        metrics.gauge('chat_outbox_unpublished_count', unpublishedCount, {
+          service: 'api',
+        });
+        metrics.gauge(
+          'chat_outbox_oldest_unpublished_seconds',
+          oldest
+            ? Math.max(0, (Date.now() - oldest.createdAt.getTime()) / 1_000)
+            : 0,
+          { service: 'api' },
+        );
         return published;
       });
     } finally {

@@ -6,6 +6,11 @@ const infrastructureSchema = z.object({
   NODE_ENV: nodeEnvSchema.default('development'),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
+  OTEL_SDK_DISABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: z.string().url().optional(),
 });
 
 export const apiEnvSchema = infrastructureSchema.extend({
@@ -32,6 +37,16 @@ export const apiEnvSchema = infrastructureSchema.extend({
     .min(1)
     .max(100)
     .default(20),
+  GENERATION_QUEUE_COMPLETED_RETENTION_COUNT: z.coerce
+    .number()
+    .int()
+    .min(100)
+    .default(1_000),
+  GENERATION_QUEUE_FAILED_RETENTION_COUNT: z.coerce
+    .number()
+    .int()
+    .min(100)
+    .default(1_000),
   GENERATION_QUEUE_PREFIX: z.string().trim().min(1).default('chat:dev:queue'),
   EVENT_KEY_PREFIX: z.string().trim().min(1).default('chat:dev:evt'),
   EVENT_HEARTBEAT_MS: z.coerce.number().int().min(1_000).default(20_000),

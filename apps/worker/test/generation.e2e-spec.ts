@@ -15,6 +15,7 @@ import { GENERATION_QUEUE_NAME } from '../src/generation/generation.constants';
 import type { GenerationJob } from '@chat/contracts';
 import { GenerationReliabilityService } from '../src/generation/generation-reliability.service';
 import { ZombieGenerationMonitorService } from '../src/generation/zombie-generation-monitor.service';
+import { metrics } from '@chat/observability';
 
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL =
@@ -115,6 +116,33 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
     expect(generation.attempts).toHaveLength(1);
     expect(generation.attempts[0]?.receivedFirstDelta).toBe(true);
     expect(provider.requests).toHaveLength(1);
+    expect(metrics.render()).toContain(
+      'chat_generation_provider_errors_total{code="CONNECTION_LOST",provider="fake"}',
+    );
+  });
+
+  it('供应商认证失败不重试并产生单次高优指标', async () => {
+    const generationId = await seedGeneration(prisma);
+    const provider = new FakeLlmProvider([
+      { error: 'AUTHENTICATION_FAILED', retryableBeforeFirstDelta: false },
+    ]);
+    await new GenerationProcessor(prisma, provider, environment).process(
+      generationId,
+    );
+
+    const generation = await prisma.generation.findUniqueOrThrow({
+      where: { id: generationId },
+      include: { attempts: true },
+    });
+    expect(generation).toMatchObject({
+      status: GenerationStatus.FAILED,
+      errorCode: 'AUTHENTICATION_FAILED',
+    });
+    expect(generation.attempts).toHaveLength(1);
+    expect(provider.requests).toHaveLength(1);
+    expect(metrics.render()).toContain(
+      'chat_generation_provider_errors_total{code="AUTHENTICATION_FAILED",provider="fake"}',
+    );
   });
 
   it('流式生成期间按版本写入 PostgreSQL checkpoint', async () => {

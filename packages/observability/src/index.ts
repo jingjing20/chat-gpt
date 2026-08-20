@@ -1,5 +1,15 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes } from 'node:crypto';
+import {
+  context as otelContext,
+  propagation,
+  SpanStatusCode,
+  trace,
+  type Attributes,
+  type Span,
+} from '@opentelemetry/api';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { NodeSDK } from '@opentelemetry/sdk-node';
 
 export interface TraceContext {
   traceId: string;
@@ -9,6 +19,7 @@ export interface TraceContext {
 }
 
 const traceStorage = new AsyncLocalStorage<TraceContext>();
+let telemetrySdk: NodeSDK | undefined;
 const sensitiveKey =
   /(?:authorization|cookie|password|secret|token|api[-_]?key|content|prompt|message)/i;
 const bearer = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
@@ -67,6 +78,75 @@ export function traceparent(context: TraceContext): string {
   return `00-${context.traceId}-${context.spanId}-01`;
 }
 
+export function initializeOpenTelemetry(serviceName: string): void {
+  if (telemetrySdk || process.env.OTEL_SDK_DISABLED === 'true') return;
+  process.env.OTEL_SERVICE_NAME ??= serviceName;
+  const endpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+  telemetrySdk = new NodeSDK({
+    ...(endpoint
+      ? { traceExporter: new OTLPTraceExporter({ url: endpoint }) }
+      : {}),
+  });
+  telemetrySdk.start();
+}
+
+export async function shutdownOpenTelemetry(): Promise<void> {
+  const sdk = telemetrySdk;
+  telemetrySdk = undefined;
+  await sdk?.shutdown();
+}
+
+export function startTelemetrySpan(
+  name: string,
+  attributes: Attributes = {},
+  carrier?: Record<string, unknown>,
+): Span {
+  const parent = carrier
+    ? propagation.extract(otelContext.active(), carrier)
+    : otelContext.active();
+  return otelContext.with(parent, () =>
+    trace.getTracer('concurrent-chat').startSpan(name, { attributes }),
+  );
+}
+
+export function finishTelemetrySpan(span: Span, statusCode: number): void {
+  span.setAttribute('http.response.status_code', statusCode);
+  span.setStatus({
+    code: statusCode >= 500 ? SpanStatusCode.ERROR : SpanStatusCode.OK,
+  });
+  span.end();
+}
+
+export async function runWithTelemetrySpan<T>(
+  name: string,
+  attributes: Attributes,
+  callback: (
+    context: Pick<TraceContext, 'traceId' | 'spanId'>,
+  ) => T | Promise<T>,
+): Promise<T> {
+  return trace
+    .getTracer('concurrent-chat')
+    .startActiveSpan(name, { attributes }, async (span) => {
+      const spanContext = span.spanContext();
+      try {
+        const result = await callback({
+          traceId: spanContext.traceId,
+          spanId: spanContext.spanId,
+        });
+        span.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (error) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error instanceof Error ? error.message : 'unknown error',
+        });
+        throw error;
+      } finally {
+        span.end();
+      }
+    });
+}
+
 type Labels = Record<string, string>;
 
 function labelKey(labels: Labels): string {
@@ -91,6 +171,19 @@ export class MetricsRegistry {
     string,
     Map<string, { labels: Labels; value: number }>
   >();
+  private readonly histograms = new Map<
+    string,
+    Map<
+      string,
+      {
+        labels: Labels;
+        buckets: number[];
+        bucketCounts: number[];
+        count: number;
+        sum: number;
+      }
+    >
+  >();
 
   increment(name: string, labels: Labels = {}, value = 1): void {
     this.set(
@@ -105,6 +198,31 @@ export class MetricsRegistry {
     this.set(this.gauges, name, labels, value);
   }
 
+  observe(
+    name: string,
+    value: number,
+    labels: Labels = {},
+    buckets = [0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 2, 5],
+  ): void {
+    const values = this.histograms.get(name) ?? new Map();
+    const key = labelKey(labels);
+    const histogram = values.get(key) ?? {
+      labels,
+      buckets,
+      bucketCounts: buckets.map(() => 0),
+      count: 0,
+      sum: 0,
+    };
+    histogram.count += 1;
+    histogram.sum += value;
+    histogram.bucketCounts = histogram.bucketCounts.map(
+      (count: number, index: number) =>
+        value <= histogram.buckets[index]! ? count + 1 : count,
+    );
+    values.set(key, histogram);
+    this.histograms.set(name, values);
+  }
+
   render(): string {
     const lines: string[] = [];
     for (const [type, collection] of [
@@ -115,6 +233,23 @@ export class MetricsRegistry {
         lines.push(`# TYPE ${name} ${type}`);
         for (const item of values.values())
           lines.push(`${name}${prometheusLabels(item.labels)} ${item.value}`);
+      }
+    }
+    for (const [name, values] of this.histograms) {
+      lines.push(`# TYPE ${name} histogram`);
+      for (const item of values.values()) {
+        item.buckets.forEach((bucket, index) => {
+          lines.push(
+            `${name}_bucket${prometheusLabels({ ...item.labels, le: String(bucket) })} ${item.bucketCounts[index]}`,
+          );
+        });
+        lines.push(
+          `${name}_bucket${prometheusLabels({ ...item.labels, le: '+Inf' })} ${item.count}`,
+        );
+        lines.push(`${name}_sum${prometheusLabels(item.labels)} ${item.sum}`);
+        lines.push(
+          `${name}_count${prometheusLabels(item.labels)} ${item.count}`,
+        );
       }
     }
     return `${lines.join('\n')}\n`;
@@ -141,6 +276,13 @@ export class MetricsRegistry {
 }
 
 export const metrics = new MetricsRegistry();
+
+export function recordProcessMetrics(service: string): void {
+  const memory = process.memoryUsage();
+  metrics.gauge('process_resident_memory_bytes', memory.rss, { service });
+  metrics.gauge('nodejs_heap_size_used_bytes', memory.heapUsed, { service });
+  metrics.gauge('nodejs_external_memory_bytes', memory.external, { service });
+}
 
 export function structuredLog(
   level: string,

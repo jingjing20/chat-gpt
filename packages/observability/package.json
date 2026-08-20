@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "jest",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
@@ -31,5 +31,10 @@
       "^.+\\.ts$": "ts-jest"
     },
     "testEnvironment": "node"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
+    "@opentelemetry/sdk-node": "^0.221.0"
   }
 }

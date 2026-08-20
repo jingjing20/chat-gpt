@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/configure-app';
 import { PrismaService } from '../src/database/prisma.service';
+import { metrics } from '@chat/observability';
 import { OutboxDispatcherService } from '../src/outbox/outbox-dispatcher.service';
 import { GENERATION_QUEUE } from '../src/outbox/outbox.constants';
 import type { Queue } from 'bullmq';
@@ -159,6 +160,7 @@ describe('API 阶段 4 Generation（端到端）', () => {
       id: generationId,
       data: { generationId },
     });
+    expect(metrics.render()).toContain('chat_outbox_unpublished_count');
   });
 
   it('查询和取消按用户隔离，重复取消保持幂等', async () => {
@@ -233,6 +235,72 @@ describe('API 阶段 4 Generation（端到端）', () => {
     });
     await create(conversationA, '释放额度后创建').expect(202);
     expect(await prisma.generation.count()).toBe(3);
+  });
+
+  it('失败任务可幂等重试并关联旧消息，跨用户和非失败任务不可重试', async () => {
+    const owner = request.agent(app.getHttpServer());
+    const stranger = request.agent(app.getHttpServer());
+    const ownerCsrf = await register(owner, 'retry-owner@example.com');
+    const strangerCsrf = await register(stranger, 'retry-stranger@example.com');
+    const conversationId = await createConversation(owner, ownerCsrf);
+    const created = await owner
+      .post(`/api/v1/conversations/${conversationId}/generations`)
+      .set('x-csrf-token', ownerCsrf)
+      .set('Idempotency-Key', randomUUID())
+      .send({ content: '请重试这个问题', clientMessageId: randomUUID() })
+      .expect(202);
+    const source = createGenerationResponseSchema.parse(created.body);
+
+    await owner
+      .post(`/api/v1/generations/${source.generation.id}/retry`)
+      .set('x-csrf-token', ownerCsrf)
+      .set('Idempotency-Key', randomUUID())
+      .expect(409)
+      .expect(({ body }: { body: Record<string, unknown> }) => {
+        expect(body.code).toBe('GENERATION_NOT_RETRYABLE');
+      });
+    await prisma.generation.update({
+      where: { id: source.generation.id },
+      data: { status: 'FAILED', completedAt: new Date() },
+    });
+    await prisma.message.update({
+      where: { id: source.assistantMessage.id },
+      data: { status: 'FAILED', content: '部分回答' },
+    });
+
+    await stranger
+      .post(`/api/v1/generations/${source.generation.id}/retry`)
+      .set('x-csrf-token', strangerCsrf)
+      .set('Idempotency-Key', randomUUID())
+      .expect(404);
+
+    const retryKey = randomUUID();
+    const retry = () =>
+      owner
+        .post(`/api/v1/generations/${source.generation.id}/retry`)
+        .set('x-csrf-token', ownerCsrf)
+        .set('Idempotency-Key', retryKey);
+    const first = createGenerationResponseSchema.parse(
+      (await retry().expect(202)).body,
+    );
+    const repeated = createGenerationResponseSchema.parse(
+      (await retry().expect(202)).body,
+    );
+    expect(repeated.generation.id).toBe(first.generation.id);
+    expect(first.userMessage.content).toBe('请重试这个问题');
+    const messages = await prisma.message.findMany({
+      where: { id: { in: [first.userMessage.id, first.assistantMessage.id] } },
+    });
+    expect(
+      messages.find((message) => message.id === first.userMessage.id)
+        ?.parentMessageId,
+    ).toBe(source.userMessage.id);
+    expect(
+      messages.find((message) => message.id === first.assistantMessage.id)
+        ?.parentMessageId,
+    ).toBe(source.assistantMessage.id);
+    expect(await prisma.generation.count()).toBe(2);
+    expect(await prisma.outboxEvent.count()).toBe(2);
   });
 
   afterAll(async () => {

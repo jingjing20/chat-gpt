@@ -192,6 +192,108 @@ export class GenerationsService {
     };
   }
 
+  async retry(
+    userId: string,
+    sourceGenerationId: string,
+    idempotencyKey: string,
+  ): Promise<CreateGenerationResponse> {
+    const existing = await this.findByIdempotencyKey(userId, idempotencyKey);
+    const requestHash = createHash('sha256')
+      .update(JSON.stringify({ sourceGenerationId }))
+      .digest('hex');
+    if (existing) return this.resolveExisting(existing, requestHash);
+
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        await transaction.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtext(${userId})) IS NULL AS locked
+        `;
+        const source = await transaction.generation.findFirst({
+          where: { id: sourceGenerationId, userId },
+          include: { requestMessage: true, responseMessage: true },
+        });
+        if (!source) this.notFound('Generation 不存在');
+        if (
+          source.status !== GenerationStatus.FAILED &&
+          source.status !== GenerationStatus.CANCELLED
+        ) {
+          throw new ApiException(
+            'GENERATION_NOT_RETRYABLE',
+            '只有失败或已取消的任务可以重试',
+            HttpStatus.CONFLICT,
+          );
+        }
+        const activeCount = await transaction.generation.count({
+          where: { userId, status: { in: [...ACTIVE_STATUSES] } },
+        });
+        if (activeCount >= this.environment.USER_GENERATION_CONCURRENCY_LIMIT) {
+          throw new ApiException(
+            'USER_CONCURRENCY_LIMIT',
+            `同时最多运行 ${this.environment.USER_GENERATION_CONCURRENCY_LIMIT} 个生成任务`,
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+        const now = new Date();
+        const userMessage = await transaction.message.create({
+          data: {
+            conversationId: source.conversationId,
+            authorUserId: userId,
+            role: MessageRole.USER,
+            status: MessageStatus.COMPLETED,
+            content: source.requestMessage.content,
+            parentMessageId: source.requestMessageId,
+            completedAt: now,
+          },
+        });
+        const assistantMessage = await transaction.message.create({
+          data: {
+            conversationId: source.conversationId,
+            role: MessageRole.ASSISTANT,
+            status: MessageStatus.PENDING,
+            content: '',
+            parentMessageId: source.responseMessageId,
+          },
+        });
+        const generation = await transaction.generation.create({
+          data: {
+            userId,
+            conversationId: source.conversationId,
+            requestMessageId: userMessage.id,
+            responseMessageId: assistantMessage.id,
+            provider: this.environment.LLM_PROVIDER,
+            model: this.environment.LLM_DEFAULT_MODEL,
+            idempotencyKey,
+            requestHash,
+          },
+        });
+        await transaction.conversation.update({
+          where: { id: source.conversationId },
+          data: { lastMessageAt: now },
+        });
+        await transaction.outboxEvent.create({
+          data: {
+            aggregateType: 'generation',
+            aggregateId: generation.id,
+            type: 'generation.enqueue',
+            payload: { generationId: generation.id },
+          },
+        });
+        return {
+          conversation: { id: source.conversationId },
+          userMessage: this.toMessage(userMessage),
+          assistantMessage: this.toMessage(assistantMessage),
+          generation: this.toGeneration(generation),
+        };
+      });
+    } catch (error) {
+      if (this.isUniqueConflict(error)) {
+        const raced = await this.findByIdempotencyKey(userId, idempotencyKey);
+        if (raced) return this.resolveExisting(raced, requestHash);
+      }
+      throw error;
+    }
+  }
+
   private async findByIdempotencyKey(userId: string, idempotencyKey: string) {
     return this.prisma.generation.findUnique({
       where: { userId_idempotencyKey: { userId, idempotencyKey } },

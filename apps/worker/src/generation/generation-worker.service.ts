@@ -1,6 +1,11 @@
 import { redisConnectionOptions, type WorkerEnv } from '@chat/config';
 import { generationJobSchema, type GenerationJob } from '@chat/contracts';
-import { createTraceContext, metrics, runWithTrace } from '@chat/observability';
+import {
+  createTraceContext,
+  metrics,
+  runWithTelemetrySpan,
+  runWithTrace,
+} from '@chat/observability';
 import {
   Inject,
   Injectable,
@@ -31,9 +36,21 @@ export class GenerationWorkerService
       async (job) => {
         const payload = generationJobSchema.parse(job.data);
         const startedAt = process.hrtime.bigint();
-        await runWithTrace(
-          createTraceContext({ generationId: payload.generationId }),
-          () => this.processor.process(payload.generationId),
+        metrics.gauge(
+          'chat_generation_queue_wait_seconds_last',
+          Math.max(0, Date.now() - job.timestamp) / 1_000,
+        );
+        await runWithTelemetrySpan(
+          'generation.process',
+          { 'generation.id': payload.generationId },
+          (traceContext) =>
+            runWithTrace(
+              createTraceContext({
+                ...traceContext,
+                generationId: payload.generationId,
+              }),
+              () => this.processor.process(payload.generationId),
+            ),
         );
         metrics.increment('chat_generation_jobs_total', {
           status: 'completed',

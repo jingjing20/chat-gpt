@@ -11,6 +11,7 @@ export default defineConfig({
   testDir: './test',
   testMatch: '**/*.e2e-spec.ts',
   fullyParallel: false,
+  workers: 1,
   retries: process.env.CI ? 1 : 0,
   timeout: 120_000,
   reporter: process.env.CI ? 'github' : 'line',

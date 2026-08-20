@@ -6,6 +6,7 @@ import {
   getConversation,
   listMessages,
   markConversationRead,
+  retryGeneration,
   saveScrollPosition,
 } from '@/lib/chat-api';
 import { ApiClientError } from '@/lib/api';
@@ -193,6 +194,29 @@ export function ConversationView({
       }
     },
   });
+  const retryMutation = useMutation({
+    mutationFn: (generationId: string) => retryGeneration(generationId),
+    onSuccess: async (result) => {
+      useGenerationStore.getState().register({
+        generationId: result.generation.id,
+        conversationId: result.generation.conversationId,
+        messageId: result.generation.responseMessageId,
+        status: result.generation.status,
+        content: '',
+        reasoningContent: '',
+        lastAppliedSequence: result.generation.lastSequence,
+        syncState: 'synced',
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.messages(conversationId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.all,
+        }),
+      ]);
+    },
+  });
   const composerStatus = activeOverlays.some(
     (generation) => generation.status === 'QUEUED',
   )
@@ -203,19 +227,23 @@ export function ConversationView({
         ? '实时连接已断开，正在重连；已生成内容不会丢失。'
         : sendMutationErrorMessage();
   useEffect(() => {
-    void markConversationRead(conversationId).then((conversation) => {
-      queryClient.setQueryData<ConversationResponse>(
-        queryKeys.conversations.detail(conversationId),
-        (currentConversation) => ({
-          ...conversation,
-          scrollOffset:
-            currentConversation?.scrollOffset ?? conversation.scrollOffset,
-        }),
-      );
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.all,
+    void markConversationRead(conversationId)
+      .then((conversation) => {
+        queryClient.setQueryData<ConversationResponse>(
+          queryKeys.conversations.detail(conversationId),
+          (currentConversation) => ({
+            ...conversation,
+            scrollOffset:
+              currentConversation?.scrollOffset ?? conversation.scrollOffset,
+          }),
+        );
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.conversations.all,
+        });
+      })
+      .catch(() => {
+        // 断网期间读回执失败不影响事件恢复，重新进入对话时会再次提交。
       });
-    });
   }, [conversationId, queryClient, terminalSignature]);
 
   useEffect(() => {
@@ -437,24 +465,16 @@ export function ConversationView({
                             ? message.error
                             : '生成失败，已保留收到的部分内容。'}
                       </span>
-                      {message.status === 'FAILED' ? (
+                      {'generationId' in message &&
+                      typeof message.generationId === 'string' ? (
                         <button
-                          onClick={() => {
-                            const index = messages.findIndex(
-                              (item) => item.id === message.id,
-                            );
-                            const request =
-                              index > 0 ? messages[index - 1] : undefined;
-                            if (request?.role === 'USER') {
-                              useGenerationStore
-                                .getState()
-                                .setDraft(conversationId, request.content);
-                              textareaRef.current?.focus();
-                            }
-                          }}
+                          disabled={retryMutation.isPending}
+                          onClick={() =>
+                            retryMutation.mutate(message.generationId)
+                          }
                           type="button"
                         >
-                          填入原问题后重试
+                          重新生成
                         </button>
                       ) : null}
                     </div>

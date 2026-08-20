@@ -10,3 +10,7 @@
 6. 销毁演练数据库和临时凭据。
 
 恢复失败时保留错误码和对象标识符，升级数据库值班人员；不得在原生产库反复尝试。
+
+本机无 Docker 时可运行 `pnpm operations:postgres-restore`。脚本只从 `chat_test`
+备份到 `/private/tmp`，恢复到带进程号的 `chat_restore_drill_*` 隔离数据库，校验表和
+迁移数量后自动清理，不覆盖源库。

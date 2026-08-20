@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "仅排除历史文档中的固定示例值"
+regexTarget = "secret"
+regexes = [
+  '''7d65a111-65cc-4ee4-b099-8e54c70b82b2''',
+  '''abc123def456''',
+]

@@ -6,6 +6,7 @@ import {
   type GenerationSyncResponse,
 } from '@chat/contracts';
 import { GenerationStatus } from '@chat/database';
+import { metrics } from '@chat/observability';
 import {
   HttpStatus,
   Inject,
@@ -28,7 +29,16 @@ export class EventsService implements OnApplicationShutdown {
     private readonly prisma: PrismaService,
     @Inject(API_ENV) private readonly environment: ApiEnv,
   ) {
-    this.redis = new Redis(redisConnectionOptions(environment.REDIS_URL));
+    this.redis = new Redis({
+      ...redisConnectionOptions(environment.REDIS_URL),
+      lazyConnect: true,
+    });
+    this.redis.on('error', () => {
+      metrics.increment('chat_redis_client_errors_total', {
+        service: 'api',
+        component: 'events',
+      });
+    });
   }
 
   async stream(
@@ -46,6 +56,7 @@ export class EventsService implements OnApplicationShutdown {
       );
     }
     this.connections.set(userId, connectionCount + 1);
+    this.recordConnectionCount();
     response.status(200);
     response.set({
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -55,8 +66,15 @@ export class EventsService implements OnApplicationShutdown {
     });
     response.flushHeaders();
     const client = this.redis.duplicate();
+    client.on('error', () => {
+      metrics.increment('chat_redis_client_errors_total', {
+        service: 'api',
+        component: 'sse_stream',
+      });
+    });
     let cursor = after;
     let closed = false;
+    const connectedAt = Date.now();
     request.on('close', () => {
       closed = true;
       client.disconnect();
@@ -87,6 +105,18 @@ export class EventsService implements OnApplicationShutdown {
               ...JSON.parse(raw),
               streamId,
             });
+            const occurredAt = Date.parse(event.occurredAt);
+            if (occurredAt >= connectedAt) {
+              metrics.observe(
+                'chat_event_forward_latency_seconds',
+                Math.max(0, Date.now() - occurredAt) / 1000,
+                { type: event.type },
+              );
+            } else {
+              metrics.increment('chat_event_replayed_total', {
+                type: event.type,
+              });
+            }
             await this.writeWithBackpressure(
               response,
               `id: ${streamId}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
@@ -101,6 +131,7 @@ export class EventsService implements OnApplicationShutdown {
       const remaining = (this.connections.get(userId) ?? 1) - 1;
       if (remaining <= 0) this.connections.delete(userId);
       else this.connections.set(userId, remaining);
+      this.recordConnectionCount();
       client.disconnect();
       if (!response.writableEnded) response.end();
     }
@@ -191,7 +222,9 @@ export class EventsService implements OnApplicationShutdown {
       if (!raw) return [];
       return [userEventSchema.parse({ ...JSON.parse(raw), streamId })];
     });
-    const latestSequence = Number(rawSequence ?? generation.lastSequence);
+    const latestSequence = rawSequence
+      ? Number(rawSequence)
+      : Number(generation.lastSequence);
     const isContiguous = events.every(
       (event, index) => event.sequence === afterSequence + index + 1,
     );
@@ -294,7 +327,9 @@ export class EventsService implements OnApplicationShutdown {
             typeof state.reasoningContent === 'string'
               ? state.reasoningContent
               : generation.responseMessage.reasoningContent,
-          sequence: Number(redisSequence ?? generation.lastSequence),
+          sequence: redisSequence
+            ? Number(redisSequence)
+            : Number(generation.lastSequence),
         };
       }),
     };
@@ -305,7 +340,16 @@ export class EventsService implements OnApplicationShutdown {
     return index >= 0 ? fields[index + 1] : undefined;
   }
 
+  private recordConnectionCount(): void {
+    metrics.gauge(
+      'chat_sse_connections',
+      [...this.connections.values()].reduce((total, value) => total + value, 0),
+      { service: 'api' },
+    );
+  }
+
   async onApplicationShutdown(): Promise<void> {
-    await this.redis.quit();
+    if (this.redis.status === 'ready') await this.redis.quit();
+    else this.redis.disconnect();
   }
 }

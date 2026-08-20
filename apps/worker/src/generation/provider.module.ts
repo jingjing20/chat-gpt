@@ -37,11 +37,24 @@ class BrowserE2eProvider implements LlmProviderAdapter {
     const latestPrompt =
       request.messages.findLast((message) => message.role === 'user')
         ?.content ?? '';
-    const isBrowserStreamingRegression = /^浏览器长流式回归 [AB]$/.test(
-      latestPrompt,
-    );
+    const isBrowserStreamingRegression =
+      /^浏览器长流式回归 [AB]$/.test(latestPrompt) ||
+      /^浏览器并发长流式回归 [AB]$/.test(latestPrompt) ||
+      latestPrompt === '浏览器恢复性能回归' ||
+      latestPrompt === '浏览器跨标签取消回归';
+    const fragmentCount = /^浏览器并发长流式回归 [AB]$/.test(latestPrompt)
+      ? 300
+      : latestPrompt === '浏览器恢复性能回归' ||
+          latestPrompt === '浏览器跨标签取消回归'
+        ? 300
+        : 100;
+    const fragmentIntervalMs =
+      latestPrompt === '浏览器跨标签取消回归' ||
+      /^浏览器并发长流式回归 [AB]$/.test(latestPrompt)
+        ? 50
+        : 20;
     const events: NormalizedLlmEvent[] = isBrowserStreamingRegression
-      ? Array.from({ length: 100 }, (_, index) => ({
+      ? Array.from({ length: fragmentCount }, (_, index) => ({
           type: 'content_delta' as const,
           delta: `流式片段-${index + 1} ${'甲'.repeat(120)}`,
         }))
@@ -52,7 +65,10 @@ class BrowserE2eProvider implements LlmProviderAdapter {
         ];
     for (const event of events) {
       await new Promise((resolve) =>
-        setTimeout(resolve, isBrowserStreamingRegression ? 20 : 200),
+        setTimeout(
+          resolve,
+          isBrowserStreamingRegression ? fragmentIntervalMs : 200,
+        ),
       );
       if (signal?.aborted) throw signal.reason;
       yield event;

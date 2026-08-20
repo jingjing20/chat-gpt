@@ -17,3 +17,38 @@ groups:
         labels: { severity: ticket }
         annotations:
           { summary: 'Worker 15 分钟没有消费任务；结合 outbox 和队列深度判断' }
+      - alert: OutboxBacklogTooOld
+        expr: chat_outbox_oldest_unpublished_seconds > 60
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: '最老未发布 Outbox 事件已超过 60 秒' }
+      - alert: GenerationQueueWaitHigh
+        expr: max_over_time(chat_generation_queue_wait_seconds_last[10m]) > 5
+        for: 10m
+        labels: { severity: ticket }
+        annotations: { summary: 'Generation 最近队列等待持续超过 5 秒' }
+      - alert: ProviderCredentialOrBalanceFailure
+        expr: increase(chat_generation_provider_errors_total{code=~"AUTHENTICATION_FAILED|INSUFFICIENT_BALANCE"}[5m]) > 0
+        labels: { severity: page }
+        annotations: { summary: '模型供应商出现认证或余额错误，单次即告警' }
+      - alert: GenerationHeartbeatFailures
+        expr: increase(chat_generation_heartbeat_failures_total[5m]) > 0
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: '活动 Generation heartbeat 持续失败' }
+      - alert: ApiResidentMemoryHigh
+        expr: process_resident_memory_bytes{service="api"} > 1073741824
+        for: 15m
+        labels: { severity: ticket }
+        annotations: { summary: 'API RSS 连续 15 分钟超过 1 GiB' }
+      - alert: EventForwardLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(chat_event_forward_latency_seconds_bucket[5m])) by (le)) > 0.2
+        for: 10m
+        labels: { severity: page }
+        annotations: { summary: '应用内部事件转发 p95 连续 10 分钟超过 200ms' }
+      - alert: RedisClientErrors
+        expr: increase(chat_redis_client_errors_total[5m]) > 0
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          { summary: 'API 或 Worker 的 Redis 客户端持续出现连接错误' }

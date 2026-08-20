@@ -16,6 +16,34 @@
     {
       "title": "最近 Generation 耗时",
       "query": "chat_generation_duration_seconds_last"
+    },
+    {
+      "title": "Outbox 积压与最老年龄",
+      "query": "chat_outbox_unpublished_count or chat_outbox_oldest_unpublished_seconds"
+    },
+    {
+      "title": "Generation 队列等待",
+      "query": "chat_generation_queue_wait_seconds_last"
+    },
+    {
+      "title": "供应商错误",
+      "query": "sum(rate(chat_generation_provider_errors_total[5m])) by (provider, code)"
+    },
+    {
+      "title": "SSE 连接数",
+      "query": "chat_sse_connections"
+    },
+    {
+      "title": "应用内部事件转发 p95",
+      "query": "histogram_quantile(0.95, sum(rate(chat_event_forward_latency_seconds_bucket[5m])) by (le))"
+    },
+    {
+      "title": "Redis 客户端错误",
+      "query": "sum(rate(chat_redis_client_errors_total[5m])) by (service, component)"
+    },
+    {
+      "title": "进程 RSS",
+      "query": "process_resident_memory_bytes"
     }
   ]
 }

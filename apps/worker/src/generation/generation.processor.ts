@@ -12,6 +12,7 @@ import {
   type NormalizedChatMessage,
   type NormalizedUsage,
 } from '@chat/llm';
+import { metrics } from '@chat/observability';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { createHmac, randomUUID } from 'node:crypto';
 import { WORKER_ENV } from '../config/worker-config';
@@ -442,6 +443,10 @@ export class GenerationProcessor {
           return;
         }
         const normalized = this.normalizeError(error, receivedFirstDelta);
+        metrics.increment('chat_generation_provider_errors_total', {
+          code: normalized.code,
+          provider: generation.provider,
+        });
         if (
           normalized.code === 'AUTHENTICATION_FAILED' ||
           normalized.code === 'INSUFFICIENT_BALANCE'
@@ -878,6 +883,7 @@ export class GenerationProcessor {
       });
       return updated.count === 1;
     } catch {
+      metrics.increment('chat_generation_heartbeat_failures_total');
       this.logger.warn(`Worker heartbeat 失败 generationId=${generationId}`);
       return true;
     }

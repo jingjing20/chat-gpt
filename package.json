@@ -9,6 +9,12 @@
     "node": ">=22.0.0",
     "pnpm": ">=9.15.0 <10"
   },
+  "pnpm": {
+    "overrides": {
+      "deepmerge-ts": "8.0.0",
+      "nanoid@<3.3.18": "3.3.18"
+    }
+  },
   "scripts": {
     "build": "turbo run build",
     "dev": "pnpm dev:prepare && turbo run dev --parallel",
@@ -26,9 +32,18 @@
     "infra:up": "docker compose -f infra/compose/compose.yml up -d",
     "infra:down": "docker compose -f infra/compose/compose.yml down",
     "infra:logs": "docker compose -f infra/compose/compose.yml logs -f",
+    "infra:native:up": "bash infra/native/up.sh",
+    "infra:native:down": "bash infra/native/down.sh",
     "db:generate": "pnpm --filter @chat/database db:generate",
     "db:migrate:deploy": "pnpm --filter @chat/database db:migrate:deploy",
-    "db:migrate:dev": "pnpm --filter @chat/database db:migrate:dev"
+    "db:migrate:dev": "pnpm --filter @chat/database db:migrate:dev",
+    "performance:query-plan": "bash tests/performance/verify-query-plans.sh",
+    "performance:redis": "bash tests/performance/redis-baseline.sh",
+    "performance:sse-endurance": "node tests/performance/sse-endurance.mjs",
+    "reliability:native-restart": "bash tests/reliability/native-restart-drill.sh",
+    "operations:postgres-restore": "bash tests/operations/postgres-restore-drill.sh",
+    "operations:verify-alerts": "bash tests/operations/verify-alerts.sh",
+    "operations:alert-delivery": "node tests/operations/alert-delivery-drill.mjs"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

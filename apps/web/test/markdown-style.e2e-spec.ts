@@ -3,9 +3,9 @@ import { expect, test } from '@playwright/test';
 test('Markdown 常用语义保留完整且可读的排版样式', async ({ page }) => {
   const email = `markdown-style-${Date.now()}@example.com`;
   await page.goto('/login');
-  await page.getByRole('button', { name: '注册' }).click();
+  await page.getByRole('tab', { name: '注册' }).click();
   await page.getByLabel('邮箱').fill(email);
-  await page.getByLabel('密码').fill('a-secure-password');
+  await page.getByRole('textbox', { name: /^密码/ }).fill('a-secure-password');
   await page.getByRole('button', { name: '创建账户' }).click();
 
   const markdown = [

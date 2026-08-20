@@ -1,6 +1,7 @@
 import { redisConnectionOptions, type WorkerEnv } from '@chat/config';
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import Redis from 'ioredis';
+import { metrics } from '@chat/observability';
 import { WORKER_ENV } from '../config/worker-config';
 
 export interface GenerationPermit {
@@ -16,6 +17,12 @@ export class GenerationReliabilityService implements OnApplicationShutdown {
     this.redis = new Redis({
       ...redisConnectionOptions(environment.REDIS_URL),
       maxRetriesPerRequest: 1,
+    });
+    this.redis.on('error', () => {
+      metrics.increment('chat_redis_client_errors_total', {
+        service: 'worker',
+        component: 'generation_reliability',
+      });
     });
   }
 

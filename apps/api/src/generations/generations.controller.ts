@@ -65,6 +65,20 @@ export class GenerationsController {
     return this.generations.cancel(request.auth!.userId, this.id(generationId));
   }
 
+  @Post('generations/:generationId/retry')
+  @HttpCode(HttpStatus.ACCEPTED)
+  retry(
+    @Req() request: Request,
+    @Param('generationId') generationId: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+  ) {
+    return this.generations.retry(
+      request.auth!.userId,
+      this.id(generationId),
+      this.idempotencyKey(idempotencyKey),
+    );
+  }
+
   private id(value: string): string {
     const parsed = idSchema.safeParse(value);
     if (!parsed.success) this.validationError('资源 ID 不合法');

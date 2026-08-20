@@ -27,6 +27,27 @@ docker compose -f infra/compose/compose.yml exec postgres pg_isready -U chat -d 
 docker compose -f infra/compose/compose.yml exec redis redis-cli ping
 ```
 
+### 不使用 Docker
+
+macOS 已安装 PostgreSQL 与 Redis 命令行程序时，可使用仓库提供的原生启动方式。
+数据只写入 Git 忽略的 `.data/native`，不会使用或修改 Homebrew 默认数据库：
+
+```bash
+pnpm infra:native:up
+pnpm db:migrate:deploy
+pnpm test:e2e:prepare
+```
+
+停止服务但保留数据：
+
+```bash
+pnpm infra:native:down
+```
+
+脚本会检查 `initdb`、`pg_ctl`、`psql`、`createdb`、`redis-server` 和 `redis-cli`，缺少命令时会明确退出；无需 Docker，也不会尝试安装系统软件。默认创建 `chat`/`chat_test` 两个数据库，分别监听 `127.0.0.1:15432` 和 `127.0.0.1:16379`。
+
+本机 Redis 8.4.0 在高压测试跨过约 65,536 个键时可能触发上游 `dictSdsCompareKV` 崩溃。日常开发不会达到该规模；运行 15 分钟负载基线时，应清空专用测试缓存，并给 API/Worker 设置 `EVENT_RETENTION_MS=60000`。生产环境不得采用这个临时阈值，应在阶段 11 使用受支持的 Redis 版本并按容量规划保留 24 小时事件。
+
 ## 数据库迁移
 
 ```bash
@@ -88,6 +109,8 @@ API 创建 generation 后立即返回 `202 Accepted`。Outbox Dispatcher 会把�
 
 ```bash
 pnpm infra:down
+# 或使用原生基础设施
+pnpm infra:native:down
 ```
 
 具名 Docker 数据卷会保留本地数据。正常停止命令不会删除数据卷。

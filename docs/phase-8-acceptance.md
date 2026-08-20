@@ -10,7 +10,7 @@
 - Redis 事件发布使用 event ID 去重并执行有限短重试；PostgreSQL 短暂连接错误对关键领取、checkpoint 和 attempt 更新执行有限短重试。
 - Outbox 周期扫描 backlog；暂时不可用时保留未发布行并在下一周期继续，BullMQ 重试有固定上限和指数退避。
 - SSE 对每用户连接数、单连接缓冲字节和 drain 等待时间设限；慢客户端会被安全断开，并可通过游标、Redis 快照或 PostgreSQL checkpoint 恢复。
-- Web 明确展示排队、生成、取消、失败和实时连接断开状态；失败回答保留 partial，并提供“填入原问题后重试”的显式入口，不自动触发新的计费请求。
+- Web 明确展示排队、生成、取消、失败和实时连接断开状态；失败回答保留 partial，并提供显式“重新生成”入口。重试创建带父消息链的新 generation，使用幂等键且不会自动触发新的计费请求。
 - `GET /api/v1/generations/:generationId/attempts` 按认证用户限定作用域，返回完整 attempt 顺序和供应商请求 ID，支持按 generation ID 排查链路。
 
 ## 自动化证据

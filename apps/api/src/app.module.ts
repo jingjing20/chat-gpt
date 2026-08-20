@@ -11,6 +11,7 @@ import { OutboxModule } from './outbox/outbox.module';
 import { EventsModule } from './events/events.module';
 import { MetricsController } from './observability/metrics.controller';
 import { ObservabilityMiddleware } from './observability/observability.middleware';
+import { MetricsNetworkGuard } from './observability/metrics-network.guard';
 
 @Module({
   imports: [
@@ -27,10 +28,12 @@ import { ObservabilityMiddleware } from './observability/observability.middlewar
     ProtectedResourceController,
     MetricsController,
   ],
-  providers: [],
+  providers: [MetricsNetworkGuard],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware, ObservabilityMiddleware).forRoutes('*');
+    consumer
+      .apply(RequestIdMiddleware, ObservabilityMiddleware)
+      .forRoutes('{*path}');
   }
 }

@@ -11,6 +11,7 @@ import {
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -81,6 +82,22 @@ export class ConversationsController {
   @HttpCode(HttpStatus.OK)
   archive(@Req() request: Request, @Param('conversationId') id: string) {
     return this.conversations.archive(this.userId(request), this.id(id));
+  }
+
+  @Post(':conversationId/restore')
+  @HttpCode(HttpStatus.OK)
+  restore(@Req() request: Request, @Param('conversationId') id: string) {
+    return this.conversations.restore(this.userId(request), this.id(id));
+  }
+
+  @Delete(':conversationId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async delete(@Req() request: Request, @Param('conversationId') id: string) {
+    await this.conversations.delete(
+      this.userId(request),
+      this.id(id),
+      request.requestId ?? 'unknown',
+    );
   }
 
   @Post(':conversationId/read')

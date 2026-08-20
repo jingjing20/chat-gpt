@@ -83,7 +83,7 @@ DeepSeek 官方接口支持 OpenAI 风格的 `/chat/completions`、`messages` �
 
 #### 对话
 
-- 新建、查看、重命名、归档对话；
+- 新建、查看、重命名、归档、恢复和永久删除对话；
 - 对话列表分页和最近活动排序；
 - 单条线性消息链；
 - Markdown、代码块和复制；
@@ -761,7 +761,9 @@ POST   /conversations
 GET    /conversations?cursor=&limit=
 GET    /conversations/{conversationId}
 PATCH  /conversations/{conversationId}
-DELETE /conversations/{conversationId}       # 实际为归档
+POST   /conversations/{conversationId}/archive
+POST   /conversations/{conversationId}/restore
+DELETE /conversations/{conversationId}       # 永久删除已归档且无活动生成任务的对话
 POST   /conversations/{conversationId}/read
 GET    /conversations/{conversationId}/messages?cursor=&limit=
 ```

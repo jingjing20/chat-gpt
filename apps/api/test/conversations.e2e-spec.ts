@@ -7,6 +7,7 @@ import {
 } from '@chat/contracts';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
+import { randomUUID } from 'node:crypto';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/configure-app';
@@ -52,7 +53,7 @@ describe('API 阶段 2 对话与消息（端到端）', () => {
     await prisma.user.deleteMany();
   });
 
-  it('创建、读取、重命名、标记已读和归档对话', async () => {
+  it('创建、读取、重命名、标记已读、归档和恢复对话', async () => {
     const agent = request.agent(app.getHttpServer());
     const csrfToken = await register(agent, 'crud@example.com');
 
@@ -108,6 +109,88 @@ describe('API 阶段 2 对话与消息（端到端）', () => {
       .expect(({ body }: { body: { items: Array<{ id: string }> } }) => {
         expect(body.items.map((item) => item.id)).toEqual([conversationId]);
       });
+
+    await agent
+      .post(`/api/v1/conversations/${conversationId}/restore`)
+      .set('x-csrf-token', csrfToken)
+      .expect(200)
+      .expect(({ body }: { body: Record<string, unknown> }) => {
+        expect(body.archivedAt).toBeNull();
+      });
+    await agent
+      .get('/api/v1/conversations')
+      .expect(200)
+      .expect(({ body }: { body: { items: Array<{ id: string }> } }) => {
+        expect(body.items.map((item) => item.id)).toEqual([conversationId]);
+      });
+  });
+
+  it('只能永久删除已归档且没有活动生成任务的本人对话', async () => {
+    const owner = request.agent(app.getHttpServer());
+    const stranger = request.agent(app.getHttpServer());
+    const ownerCsrf = await register(owner, 'delete-owner@example.com');
+    const strangerCsrf = await register(
+      stranger,
+      'delete-stranger@example.com',
+    );
+    const created = await owner
+      .post('/api/v1/conversations')
+      .set('x-csrf-token', ownerCsrf)
+      .send({ title: '待永久删除' })
+      .expect(201);
+    const conversationId = conversationResponseSchema.parse(created.body).id;
+
+    await owner
+      .delete(`/api/v1/conversations/${conversationId}`)
+      .set('x-csrf-token', ownerCsrf)
+      .expect(409)
+      .expect(({ body }: { body: Record<string, unknown> }) => {
+        expect(body.code).toBe('CONVERSATION_NOT_ARCHIVED');
+      });
+    await stranger
+      .delete(`/api/v1/conversations/${conversationId}`)
+      .set('x-csrf-token', strangerCsrf)
+      .expect(404);
+
+    await owner
+      .post(`/api/v1/conversations/${conversationId}/generations`)
+      .set('x-csrf-token', ownerCsrf)
+      .set('Idempotency-Key', randomUUID())
+      .send({ content: '仍在生成', clientMessageId: randomUUID() })
+      .expect(202);
+    await owner
+      .post(`/api/v1/conversations/${conversationId}/archive`)
+      .set('x-csrf-token', ownerCsrf)
+      .expect(200);
+    await owner
+      .delete(`/api/v1/conversations/${conversationId}`)
+      .set('x-csrf-token', ownerCsrf)
+      .expect(409)
+      .expect(({ body }: { body: Record<string, unknown> }) => {
+        expect(body.code).toBe('CONVERSATION_HAS_ACTIVE_GENERATION');
+      });
+
+    await prisma.generation.updateMany({
+      where: { conversationId },
+      data: { status: 'CANCELLED' },
+    });
+    await owner
+      .delete(`/api/v1/conversations/${conversationId}`)
+      .set('x-csrf-token', ownerCsrf)
+      .expect(204);
+    expect(
+      await prisma.conversation.count({ where: { id: conversationId } }),
+    ).toBe(0);
+    expect(await prisma.message.count({ where: { conversationId } })).toBe(0);
+    expect(await prisma.generation.count({ where: { conversationId } })).toBe(
+      0,
+    );
+    expect(await prisma.outboxEvent.count()).toBe(0);
+    expect(
+      await prisma.auditLog.findFirst({
+        where: { action: 'CONVERSATION_DELETED', subjectId: conversationId },
+      }),
+    ).toMatchObject({ outcome: 'SUCCEEDED' });
   });
 
   it('消息游标分页没有重复或遗漏，并持久化静态 assistant 消息', async () => {
@@ -175,6 +258,10 @@ describe('API 阶段 2 对话与消息（端到端）', () => {
       .put(`/api/v1/conversations/${conversationId}/scroll-position`)
       .set('x-csrf-token', strangerCsrf)
       .send({ scrollOffset: 800 })
+      .expect(404);
+    await stranger
+      .post(`/api/v1/conversations/${conversationId}/restore`)
+      .set('x-csrf-token', strangerCsrf)
       .expect(404);
   });
 

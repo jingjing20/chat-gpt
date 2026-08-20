@@ -5,7 +5,14 @@ import type {
   MessagePageResponse,
   MessageResponse,
 } from '@chat/contracts';
-import { MessageRole, MessageStatus, Prisma } from '@chat/database';
+import {
+  AuditAction,
+  AuditOutcome,
+  GenerationStatus,
+  MessageRole,
+  MessageStatus,
+  Prisma,
+} from '@chat/database';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ApiException } from '../http/api-exception';
@@ -17,6 +24,13 @@ interface MessageCursor {
   id: string;
   createdAt: string;
 }
+
+const ACTIVE_GENERATION_STATUSES = [
+  GenerationStatus.QUEUED,
+  GenerationStatus.STARTING,
+  GenerationStatus.STREAMING,
+  GenerationStatus.CANCEL_REQUESTED,
+] as const;
 
 @Injectable()
 export class ConversationsService {
@@ -90,6 +104,81 @@ export class ConversationsService {
       data: { archivedAt: new Date() },
     });
     return this.get(userId, conversationId);
+  }
+
+  async restore(
+    userId: string,
+    conversationId: string,
+  ): Promise<ConversationResponse> {
+    await this.requireScoped(userId, conversationId);
+    await this.prisma.conversationUserState.update({
+      where: { conversationId_userId: { conversationId, userId } },
+      data: { archivedAt: null },
+    });
+    return this.get(userId, conversationId);
+  }
+
+  async delete(
+    userId: string,
+    conversationId: string,
+    requestId: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (transaction) => {
+      const conversation = await transaction.conversation.findFirst({
+        where: {
+          id: conversationId,
+          ownerUserId: userId,
+          userStates: { some: { userId } },
+        },
+        include: {
+          userStates: { where: { userId }, take: 1 },
+          generations: { select: { id: true, status: true } },
+        },
+      });
+      if (!conversation) {
+        throw new ApiException('NOT_FOUND', '对话不存在', HttpStatus.NOT_FOUND);
+      }
+      if (!conversation.userStates[0]?.archivedAt) {
+        throw new ApiException(
+          'CONVERSATION_NOT_ARCHIVED',
+          '只能永久删除已归档的对话',
+          HttpStatus.CONFLICT,
+        );
+      }
+      if (
+        conversation.generations.some((generation) =>
+          ACTIVE_GENERATION_STATUSES.includes(
+            generation.status as (typeof ACTIVE_GENERATION_STATUSES)[number],
+          ),
+        )
+      ) {
+        throw new ApiException(
+          'CONVERSATION_HAS_ACTIVE_GENERATION',
+          '对话仍有活动生成任务，请先停止生成',
+          HttpStatus.CONFLICT,
+        );
+      }
+
+      const generationIds = conversation.generations.map(({ id }) => id);
+      if (generationIds.length > 0) {
+        await transaction.outboxEvent.deleteMany({
+          where: {
+            aggregateType: 'generation',
+            aggregateId: { in: generationIds },
+          },
+        });
+      }
+      await transaction.conversation.delete({ where: { id: conversationId } });
+      await transaction.auditLog.create({
+        data: {
+          userId,
+          action: AuditAction.CONVERSATION_DELETED,
+          outcome: AuditOutcome.SUCCEEDED,
+          requestId,
+          subjectId: conversationId,
+        },
+      });
+    });
   }
 
   async markRead(

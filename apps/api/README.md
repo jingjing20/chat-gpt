@@ -34,6 +34,8 @@ GET    /api/v1/conversations?archived=false
 GET    /api/v1/conversations/{conversationId}
 PATCH  /api/v1/conversations/{conversationId}
 POST   /api/v1/conversations/{conversationId}/archive
+POST   /api/v1/conversations/{conversationId}/restore
+DELETE /api/v1/conversations/{conversationId}
 POST   /api/v1/conversations/{conversationId}/read
 PUT    /api/v1/conversations/{conversationId}/scroll-position
 GET    /api/v1/conversations/{conversationId}/messages?limit=30&cursor=...

@@ -19,6 +19,7 @@ import {
   MessageSquarePlus,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings,
 } from 'lucide-react';
 import type { ConversationResponse } from '@chat/contracts';
 
@@ -147,17 +148,28 @@ export function ChatShell({ children }: { children: ReactNode }) {
               {userQuery.data.email.split('@')[0]}
             </span>
           </div>
-          <button
-            aria-label="退出登录"
-            className="logout-button"
-            disabled={logoutMutation.isPending}
-            onClick={() => logoutMutation.mutate()}
-            title="退出登录"
-            type="button"
-          >
-            <LogOut aria-hidden="true" size={16} />
-            <span>{logoutMutation.isPending ? '正在退出…' : '退出登录'}</span>
-          </button>
+          <div className="account-actions">
+            <Link
+              aria-label="设置"
+              className="settings-link"
+              href="/settings"
+              title="设置"
+            >
+              <Settings aria-hidden="true" size={16} />
+              <span>设置</span>
+            </Link>
+            <button
+              aria-label="退出登录"
+              className="logout-button"
+              disabled={logoutMutation.isPending}
+              onClick={() => logoutMutation.mutate()}
+              title="退出登录"
+              type="button"
+            >
+              <LogOut aria-hidden="true" size={16} />
+              <span>{logoutMutation.isPending ? '正在退出…' : '退出登录'}</span>
+            </button>
+          </div>
         </div>
       </aside>
       <section className="chat-stage" key={params.conversationId ?? 'empty'}>

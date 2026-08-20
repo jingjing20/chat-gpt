@@ -574,6 +574,14 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+.account-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.settings-link,
 .logout-button {
   display: flex;
   flex: 0 0 auto;
@@ -585,6 +593,12 @@ textarea:focus-visible {
   background: transparent;
   color: var(--muted);
   font-size: 11px;
+  text-decoration: none;
+}
+
+.settings-link:hover {
+  background: rgba(154, 245, 189, 0.07);
+  color: var(--accent);
 }
 
 .logout-button:hover {
@@ -618,6 +632,106 @@ textarea:focus-visible {
       transparent 35rem
     ),
     var(--background);
+}
+
+.settings-page {
+  height: 100%;
+  padding: clamp(28px, 5vw, 68px);
+  overflow-y: auto;
+}
+
+.settings-header,
+.archived-list {
+  width: min(100%, 820px);
+  margin: 0 auto;
+}
+
+.settings-header {
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-header p {
+  margin: 0 0 12px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.settings-header h1 {
+  margin: 0;
+  font-size: clamp(26px, 4vw, 38px);
+  letter-spacing: -0.035em;
+}
+
+.settings-header span {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.archived-list {
+  padding-top: 10px;
+}
+
+.archived-item {
+  display: flex;
+  min-height: 82px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.archived-item h2 {
+  margin: 0 0 7px;
+  font-size: 14px;
+  font-weight: 620;
+}
+
+.archived-item time {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.archived-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.archived-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-state,
+.settings-empty {
+  margin: 36px 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.settings-state.error {
+  color: var(--danger);
+}
+
+.settings-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 36px;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+}
+
+.settings-empty p {
+  margin: 0;
 }
 
 .centered-state {
@@ -805,6 +919,7 @@ textarea:focus-visible {
 .sidebar-collapsed .new-conversation-button span,
 .sidebar-collapsed .conversation-nav,
 .sidebar-collapsed .account-name,
+.sidebar-collapsed .settings-link span,
 .sidebar-collapsed .logout-button span {
   display: none;
 }
@@ -823,11 +938,16 @@ textarea:focus-visible {
   gap: 7px;
 }
 
+.sidebar-collapsed .settings-link,
 .sidebar-collapsed .logout-button {
   width: 32px;
   height: 32px;
   justify-content: center;
   padding: 0;
+}
+
+.sidebar-collapsed .account-actions {
+  flex-direction: column;
 }
 
 .message-list {
@@ -1515,6 +1635,7 @@ textarea:focus-visible {
 
   .brand-name,
   .account-name,
+  .settings-link span,
   .logout-button span {
     display: none;
   }
@@ -1548,11 +1669,25 @@ textarea:focus-visible {
     padding: 15px 8px;
   }
 
+  .settings-link,
   .logout-button {
     width: 32px;
     height: 32px;
     justify-content: center;
     padding: 0;
+  }
+
+  .account-actions {
+    flex-direction: column;
+  }
+
+  .settings-page {
+    padding: 28px 20px;
+  }
+
+  .archived-item {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .conversation-header {

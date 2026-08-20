@@ -85,6 +85,18 @@ export async function archiveConversation(conversationId: string) {
   );
 }
 
+export async function restoreConversation(conversationId: string) {
+  return conversationResponseSchema.parse(
+    await apiRequest(`/conversations/${conversationId}/restore`, {
+      method: 'POST',
+    }),
+  );
+}
+
+export async function deleteConversation(conversationId: string) {
+  await apiRequest(`/conversations/${conversationId}`, { method: 'DELETE' });
+}
+
 export async function markConversationRead(conversationId: string) {
   return conversationResponseSchema.parse(
     await apiRequest(`/conversations/${conversationId}/read`, {

@@ -1,0 +1,52 @@
+apps/api/README.md
+  78b4c4f8851b2174 37-38
+docs/phase-2-acceptance.md
+  78b4c4f8851b2174 6,20-21
+docs/project-development-plan.md
+  78b4c4f8851b2174 86,764-766
+apps/api/src/conversations/conversations.controller.ts
+  78b4c4f8851b2174 14,87-102
+apps/api/test/conversations.e2e-spec.ts
+  78b4c4f8851b2174 10,56,112-193,262-265
+apps/web/src/components/archived-conversations.tsx
+  78b4c4f8851b2174 1-148
+apps/web/src/components/chat-shell.tsx
+  78b4c4f8851b2174 22,151-172
+apps/web/src/app/globals.css
+  78b4c4f8851b2174 577-584,596-601,637-736,922,941,949-952,1638,1672,1680-1692
+apps/api/src/conversations/conversations.service.ts
+  78b4c4f8851b2174 8-15,28-34,109-183
+packages/database/prisma/migrations/20260820000100_conversation_deletion_audit/migration.sql
+  78b4c4f8851b2174 1
+apps/web/src/app/settings/layout.tsx
+  78b4c4f8851b2174 1-6
+docs/adr/0005-conversation-archive-and-permanent-deletion.md
+  78b4c4f8851b2174 1-28
+apps/web/src/lib/chat-api.ts
+  78b4c4f8851b2174 88-99
+apps/web/src/app/settings/page.tsx
+  78b4c4f8851b2174 1-5
+packages/database/prisma/schema.prisma
+  78b4c4f8851b2174 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "bzl_git_version": "0.1.30",
+  "base_commit_sha": "8cf4f06ac64aaf02fc4ef09390c80c871d94d27d",
+  "prompts": {
+    "78b4c4f8851b2174": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01e05-eb38-78f1-b79d-8736487aaba7",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 569,
+      "total_deletions": 23,
+      "accepted_lines": 563,
+      "overriden_lines": 0
+    }
+  }
+}

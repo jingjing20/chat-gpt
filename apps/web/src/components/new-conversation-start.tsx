@@ -6,6 +6,7 @@ import { queryKeys } from '@/lib/query-keys';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { ArrowUp } from 'lucide-react';
 
 function createTitle(content: string) {
   const compact = content.replace(/\s+/g, ' ').trim();
@@ -51,7 +52,7 @@ export function NewConversationStart() {
       <div className="empty-chat-intro">
         <span className="empty-chat-orb" aria-hidden="true" />
         <h1>有什么可以帮你？</h1>
-        <p>输入一个问题开始对话，支持 Markdown、代码和 Mermaid 流程图。</p>
+        <p>无论是梳理思路、分析问题，还是编写代码，都可以从这里开始。</p>
       </div>
       <form className="home-composer" onSubmit={submit}>
         <textarea
@@ -65,7 +66,7 @@ export function NewConversationStart() {
               event.currentTarget.form?.requestSubmit();
             }
           }}
-          placeholder="输入消息，Enter 发送"
+          placeholder="输入消息…"
           rows={1}
           value={content}
         />
@@ -74,7 +75,7 @@ export function NewConversationStart() {
           disabled={startMutation.isPending || !content.trim()}
           type="submit"
         >
-          ↑
+          <ArrowUp aria-hidden="true" size={19} />
         </button>
         {startMutation.isError ? (
           <p className="home-composer-error">创建对话失败，请稍后重试。</p>

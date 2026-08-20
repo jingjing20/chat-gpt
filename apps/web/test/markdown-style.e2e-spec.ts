@@ -6,7 +6,7 @@ test('Markdown 常用语义保留完整且可读的排版样式', async ({ page 
   await page.getByRole('button', { name: '注册' }).click();
   await page.getByLabel('邮箱').fill(email);
   await page.getByLabel('密码').fill('a-secure-password');
-  await page.getByRole('button', { name: '注册并开始' }).click();
+  await page.getByRole('button', { name: '创建账户' }).click();
 
   const markdown = [
     '# 一级标题',

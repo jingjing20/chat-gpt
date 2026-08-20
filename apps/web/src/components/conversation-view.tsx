@@ -347,9 +347,9 @@ export function ConversationView({
     <div className="conversation-view">
       <header className="conversation-header">
         <h1>{detailQuery.data.title}</h1>
-        <span className="conversation-mode">
+        <span className="conversation-mode" title="当前使用的模型">
           <i aria-hidden="true" />
-          DeepSeek
+          <span>DeepSeek</span>
         </span>
       </header>
       <div
@@ -503,7 +503,7 @@ export function ConversationView({
                 event.currentTarget.form?.requestSubmit();
               }
             }}
-            placeholder="给助手发送消息"
+            placeholder="输入消息…"
             ref={textareaRef}
             rows={1}
             value={content}
@@ -515,7 +515,10 @@ export function ConversationView({
           >
             <ArrowUp aria-hidden="true" size={19} />
           </button>
-          <p>Enter 发送 · Shift + Enter 换行</p>
+          <p>
+            <span>内容由 AI 生成，请核实重要信息</span>
+            <span>Enter 发送 · Shift + Enter 换行</span>
+          </p>
         </div>
       </form>
     </div>

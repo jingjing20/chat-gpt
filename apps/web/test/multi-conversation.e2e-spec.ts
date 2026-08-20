@@ -205,7 +205,7 @@ async function register(page: import('@playwright/test').Page) {
     .getByLabel('邮箱')
     .fill(`phase6-${crypto.randomUUID()}@example.com`);
   await page.getByLabel('密码').fill('a-secure-password');
-  await page.getByRole('button', { name: '注册并开始' }).click();
+  await page.getByRole('button', { name: '创建账户' }).click();
   await expect(page).toHaveURL(/\/chat$/);
 }
 

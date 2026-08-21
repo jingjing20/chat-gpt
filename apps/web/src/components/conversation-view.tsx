@@ -38,6 +38,7 @@ import { ArrowDown, ArrowUp, Square } from 'lucide-react';
 import { AnswerActions } from './answer-actions';
 import {
   isViewportNearBottom,
+  resolveConversationScrollTarget,
   shouldShowScrollToBottom,
 } from '@/lib/scroll-follow';
 import type { ConversationResponse } from '@chat/contracts';
@@ -256,7 +257,12 @@ export function ConversationView({
     ) {
       return;
     }
-    const targetScrollOffset = detailQuery.data.scrollOffset;
+    const targetScrollOffset = resolveConversationScrollTarget({
+      clientHeight: viewport.clientHeight,
+      hasActiveGeneration: activeOverlays.length > 0,
+      savedScrollOffset: detailQuery.data.scrollOffset,
+      scrollHeight: viewport.scrollHeight,
+    });
     let attempts = 0;
     restorationPendingRef.current = true;
     persistedScrollOffsetRef.current = targetScrollOffset;
@@ -284,7 +290,12 @@ export function ConversationView({
         restorationFrameRef.current = null;
       }
     };
-  }, [conversationId, detailQuery.data, messagesQuery.isPending]);
+  }, [
+    activeOverlays.length,
+    conversationId,
+    detailQuery.data,
+    messagesQuery.isPending,
+  ]);
 
   useLayoutEffect(() => {
     if (!streamingSignature) return;

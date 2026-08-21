@@ -53,6 +53,52 @@ test('流式自动跟随不保存滚动位置，用户主动滚动才保存', as
     .toBe(expectedScrollOffset);
 });
 
+test('切回正在生成的对话时滚动到最新消息', async ({ page }) => {
+  await register(page);
+  const conversationA = await createNamedConversation(
+    page,
+    '活动生成滚动回归 A',
+  );
+  const conversationB = await createNamedConversation(
+    page,
+    '活动生成滚动回归 B',
+  );
+
+  await page.locator(`a[href="/chat/${conversationA}"]`).click();
+  await waitForConversation(page, '活动生成滚动回归 A');
+  await send(page, '浏览器长流式回归滚动 A');
+  await expect(page.getByLabel('正在生成')).toHaveCount(1);
+
+  const viewport = page.locator('.message-viewport');
+  await expect
+    .poll(() =>
+      viewport.evaluate(
+        (element) => element.scrollHeight > element.clientHeight,
+      ),
+    )
+    .toBe(true);
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+    element.dispatchEvent(new Event('scroll'));
+  });
+
+  await page.locator(`a[href="/chat/${conversationB}"]`).click();
+  await waitForConversation(page, '活动生成滚动回归 B');
+  await page.locator(`a[href="/chat/${conversationA}"]`).click();
+  await waitForConversation(page, '活动生成滚动回归 A');
+  await expect(page.getByLabel('正在生成')).toHaveCount(1);
+
+  await expect
+    .poll(() =>
+      viewport.evaluate((element) =>
+        Math.round(
+          element.scrollHeight - element.clientHeight - element.scrollTop,
+        ),
+      ),
+    )
+    .toBeLessThanOrEqual(48);
+});
+
 test('切回并发对话后正文继续流式增长且状态圆点保留', async ({ page }) => {
   await register(page);
   const conversationA = await createNamedConversation(

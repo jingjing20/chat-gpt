@@ -37,3 +37,19 @@ export function shouldShowScrollToBottom(viewport: {
     distanceFromViewportBottom(viewport) > SHOW_SCROLL_TO_BOTTOM_THRESHOLD_PX
   );
 }
+
+export function resolveConversationScrollTarget({
+  clientHeight,
+  hasActiveGeneration,
+  savedScrollOffset,
+  scrollHeight,
+}: {
+  clientHeight: number;
+  hasActiveGeneration: boolean;
+  savedScrollOffset: number;
+  scrollHeight: number;
+}) {
+  return hasActiveGeneration
+    ? Math.max(0, scrollHeight - clientHeight)
+    : savedScrollOffset;
+}

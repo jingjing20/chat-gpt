@@ -8,6 +8,7 @@ import {
 } from './generation-store';
 import {
   isViewportNearBottom,
+  resolveConversationScrollTarget,
   shouldShowScrollToBottom,
 } from './scroll-follow';
 
@@ -103,6 +104,27 @@ test('仅在视口贴近底部时保持自动滚动', () => {
       scrollTop: 551,
     }),
     false,
+  );
+});
+
+test('进入正在生成的对话时忽略保存的滚动高度', () => {
+  assert.equal(
+    resolveConversationScrollTarget({
+      clientHeight: 400,
+      hasActiveGeneration: true,
+      savedScrollOffset: 320,
+      scrollHeight: 1_200,
+    }),
+    800,
+  );
+  assert.equal(
+    resolveConversationScrollTarget({
+      clientHeight: 400,
+      hasActiveGeneration: false,
+      savedScrollOffset: 320,
+      scrollHeight: 1_200,
+    }),
+    320,
   );
 });
 

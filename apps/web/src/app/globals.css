@@ -273,7 +273,6 @@ textarea:focus-visible {
 }
 
 .sidebar-heading,
-.account-row,
 .conversation-header {
   display: flex;
   align-items: center;
@@ -320,6 +319,7 @@ textarea:focus-visible {
 }
 
 .sidebar-toggle {
+  position: relative;
   display: grid;
   width: 32px;
   height: 32px;
@@ -330,6 +330,35 @@ textarea:focus-visible {
   border-radius: 9px;
   background: transparent;
   color: var(--muted);
+}
+
+.sidebar-collapsed .sidebar-toggle::after {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 13px);
+  z-index: 70;
+  width: max-content;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: #252826;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  color: var(--text);
+  content: attr(data-tooltip);
+  font-size: 12px;
+  font-weight: 650;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, -50%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.sidebar-collapsed .sidebar-toggle:hover::after,
+.sidebar-collapsed .sidebar-toggle:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
 }
 
 .sidebar-toggle:hover {
@@ -539,11 +568,29 @@ textarea:focus-visible {
   line-height: 1.6;
 }
 
-.account-row {
+.account-area {
   flex: 0 0 auto;
-  gap: 12px;
-  padding: 15px 18px;
+  padding: 9px;
   border-top: 1px solid var(--border);
+}
+
+.account-trigger {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+}
+
+.account-trigger:hover,
+.account-trigger[data-popup-open] {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .account-identity {
@@ -574,36 +621,105 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
-.account-actions {
+.account-copy {
   display: flex;
-  flex: 0 0 auto;
-  align-items: center;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
   gap: 2px;
 }
 
-.settings-link,
-.logout-button {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 8px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
+.account-plan {
   color: var(--muted);
   font-size: 11px;
-  text-decoration: none;
 }
 
-.settings-link:hover {
-  background: rgba(154, 245, 189, 0.07);
-  color: var(--accent);
+.account-chevron {
+  flex: none;
+  color: var(--muted);
 }
 
-.logout-button:hover {
-  background: rgba(255, 149, 140, 0.08);
+.account-menu-positioner {
+  z-index: 60;
+  outline: 0;
+}
+
+.account-menu {
+  width: 242px;
+  padding: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  outline: 0;
+  background: #252826;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.48);
+  transform-origin: var(--transform-origin);
+}
+
+.account-menu[data-starting-style],
+.account-menu[data-ending-style] {
+  opacity: 0;
+  transform: translateY(5px) scale(0.97);
+}
+
+.account-menu {
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.account-menu-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 9px;
+}
+
+.account-menu-profile strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu-profile .account-copy > span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu-divider {
+  height: 1px;
+  margin: 5px 7px;
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.account-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 9px;
+  border-radius: 10px;
+  outline: 0;
+  color: #e3ebe6;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.account-menu-item[data-highlighted] {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.account-menu-item.danger {
   color: var(--danger);
+}
+
+.account-menu-item[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .text-button {
@@ -915,12 +1031,19 @@ textarea:focus-visible {
   gap: 8px;
 }
 
+.sidebar-collapsed .sidebar-toggle {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+}
+
 .sidebar-collapsed .brand-name,
+.sidebar-collapsed .brand-link,
 .sidebar-collapsed .new-conversation-button span,
 .sidebar-collapsed .conversation-nav,
 .sidebar-collapsed .account-name,
-.sidebar-collapsed .settings-link span,
-.sidebar-collapsed .logout-button span {
+.sidebar-collapsed .account-plan,
+.sidebar-collapsed .account-chevron {
   display: none;
 }
 
@@ -931,23 +1054,16 @@ textarea:focus-visible {
   padding: 0;
 }
 
-.sidebar-collapsed .account-row {
-  padding: 14px 8px;
-  flex-direction: column;
-  justify-content: center;
-  gap: 7px;
+.sidebar-collapsed .account-area {
+  margin-top: auto;
+  padding: 9px 8px;
 }
 
-.sidebar-collapsed .settings-link,
-.sidebar-collapsed .logout-button {
-  width: 32px;
-  height: 32px;
+.sidebar-collapsed .account-trigger {
+  width: 42px;
+  height: 42px;
   justify-content: center;
-  padding: 0;
-}
-
-.sidebar-collapsed .account-actions {
-  flex-direction: column;
+  padding: 7px;
 }
 
 .message-list {
@@ -1634,9 +1750,10 @@ textarea:focus-visible {
   }
 
   .brand-name,
+  .brand-link,
   .account-name,
-  .settings-link span,
-  .logout-button span {
+  .account-plan,
+  .account-chevron {
     display: none;
   }
 
@@ -1645,6 +1762,12 @@ textarea:focus-visible {
     padding: 12px 0 8px;
     flex-direction: column;
     gap: 7px;
+  }
+
+  .sidebar-toggle {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
   }
 
   .conversation-link {
@@ -1663,22 +1786,16 @@ textarea:focus-visible {
     display: none;
   }
 
-  .account-row {
-    flex-direction: column;
-    justify-content: center;
-    padding: 15px 8px;
+  .account-area {
+    margin-top: auto;
+    padding: 9px 8px;
   }
 
-  .settings-link,
-  .logout-button {
-    width: 32px;
-    height: 32px;
+  .account-trigger {
+    width: 42px;
+    height: 42px;
     justify-content: center;
-    padding: 0;
-  }
-
-  .account-actions {
-    flex-direction: column;
+    padding: 7px;
   }
 
   .settings-page {

@@ -8,6 +8,7 @@ import {
 } from '@/lib/chat-api';
 import { queryKeys } from '@/lib/query-keys';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Menu } from '@base-ui/react/menu';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
@@ -20,6 +21,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  ChevronRight,
 } from 'lucide-react';
 import type { ConversationResponse } from '@chat/contracts';
 
@@ -100,8 +102,9 @@ export function ChatShell({ children }: { children: ReactNode }) {
           <button
             aria-label={isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
             className="sidebar-toggle"
+            data-tooltip={isSidebarCollapsed ? '打开侧边栏' : undefined}
             onClick={() => setIsSidebarCollapsed((collapsed) => !collapsed)}
-            title={isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+            title={isSidebarCollapsed ? undefined : '收起侧边栏'}
             type="button"
           >
             {isSidebarCollapsed ? (
@@ -139,37 +142,68 @@ export function ChatShell({ children }: { children: ReactNode }) {
             <p className="empty-nav">还没有对话，从首页输入一个问题开始。</p>
           ) : null}
         </nav>
-        <div className="account-row" title={userQuery.data.email}>
-          <div className="account-identity">
-            <span className="avatar">
-              {userQuery.data.email[0]?.toUpperCase()}
-            </span>
-            <span className="account-name">
-              {userQuery.data.email.split('@')[0]}
-            </span>
-          </div>
-          <div className="account-actions">
-            <Link
-              aria-label="设置"
-              className="settings-link"
-              href="/settings"
-              title="设置"
+        <div className="account-area">
+          <Menu.Root>
+            <Menu.Trigger
+              aria-label="打开账户菜单"
+              className="account-trigger"
+              title={userQuery.data.email}
             >
-              <Settings aria-hidden="true" size={16} />
-              <span>设置</span>
-            </Link>
-            <button
-              aria-label="退出登录"
-              className="logout-button"
-              disabled={logoutMutation.isPending}
-              onClick={() => logoutMutation.mutate()}
-              title="退出登录"
-              type="button"
-            >
-              <LogOut aria-hidden="true" size={16} />
-              <span>{logoutMutation.isPending ? '正在退出…' : '退出登录'}</span>
-            </button>
-          </div>
+              <span className="account-identity">
+                <span className="avatar">
+                  {userQuery.data.email[0]?.toUpperCase()}
+                </span>
+                <span className="account-copy">
+                  <span className="account-name">
+                    {userQuery.data.email.split('@')[0]}
+                  </span>
+                  <span className="account-plan">账户</span>
+                </span>
+              </span>
+              <ChevronRight
+                aria-hidden="true"
+                className="account-chevron"
+                size={17}
+              />
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Positioner
+                align="start"
+                className="account-menu-positioner"
+                side="top"
+                sideOffset={8}
+              >
+                <Menu.Popup className="account-menu">
+                  <div className="account-menu-profile">
+                    <span className="avatar account-menu-avatar">
+                      {userQuery.data.email[0]?.toUpperCase()}
+                    </span>
+                    <span className="account-copy">
+                      <strong>{userQuery.data.email.split('@')[0]}</strong>
+                      <span>{userQuery.data.email}</span>
+                    </span>
+                  </div>
+                  <div className="account-menu-divider" />
+                  <Menu.Item
+                    className="account-menu-item"
+                    onClick={() => router.push('/settings')}
+                  >
+                    <Settings aria-hidden="true" size={18} />
+                    设置
+                  </Menu.Item>
+                  <div className="account-menu-divider" />
+                  <Menu.Item
+                    className="account-menu-item danger"
+                    disabled={logoutMutation.isPending}
+                    onClick={() => logoutMutation.mutate()}
+                  >
+                    <LogOut aria-hidden="true" size={18} />
+                    {logoutMutation.isPending ? '正在退出…' : '退出登录'}
+                  </Menu.Item>
+                </Menu.Popup>
+              </Menu.Positioner>
+            </Menu.Portal>
+          </Menu.Root>
         </div>
       </aside>
       <section className="chat-stage" key={params.conversationId ?? 'empty'}>

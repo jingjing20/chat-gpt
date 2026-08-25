@@ -9,6 +9,9 @@ import Link from 'next/link';
 import { useShallow } from 'zustand/react/shallow';
 import { ConversationActions } from './conversation-actions';
 
+/**
+ * 订阅全局 generation 状态，在非当前对话仍生成时展示活动标记。
+ */
 export function ConversationNavLink({
   conversation,
   isActive,

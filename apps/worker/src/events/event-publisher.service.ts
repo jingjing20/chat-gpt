@@ -7,6 +7,9 @@ import { metrics } from '@chat/observability';
 import { WORKER_ENV } from '../config/worker-config';
 import { eventKeys } from './event-keys';
 
+/**
+ * 原子推进 generation sequence，并同时写入快照、generation Stream 和用户 Stream。
+ */
 const PUBLISH_SCRIPT = `
 local prior = redis.call('GET', KEYS[5])
 if prior then
@@ -58,6 +61,9 @@ export class EventPublisherService implements OnApplicationShutdown {
   private readonly prefix: string;
   private readonly retentionMs: number;
 
+  /**
+   * 使用 eventId 去重并有限重试，确保一次逻辑事件在两类 Stream 中共享同一 sequence。
+   */
   async publish(input: PublishGenerationEventInput): Promise<UserEvent> {
     const keys = eventKeys(this.prefix, input.userId, input.generationId);
     const base = {

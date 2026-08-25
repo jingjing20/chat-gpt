@@ -15,6 +15,9 @@ const idSchema = z.string().uuid();
 export class EventsController {
   constructor(private readonly events: EventsService) {}
 
+  /**
+   * 从认证上下文确定用户身份，不接受客户端指定 userId，防止跨用户订阅事件。
+   */
   @Get('events')
   async stream(
     @Req() request: Request,
@@ -29,11 +32,17 @@ export class EventsController {
     );
   }
 
+  /**
+   * 返回当前用户的活动 generation 快照和后续开流所需的基线游标。
+   */
   @Get('sync')
   sync(@Req() request: Request) {
     return this.events.sync(request.auth!.userId);
   }
 
+  /**
+   * 按 generation 和 sequence 定向补偿，不扫描用户级事件历史。
+   */
   @Get('generations/:generationId/events')
   history(
     @Req() request: Request,

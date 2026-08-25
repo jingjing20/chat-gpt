@@ -51,6 +51,9 @@ export class OutboxDispatcherService
     await this.queue.close();
   }
 
+  /**
+   * 锁定一批未发布 Outbox 并投递 BullMQ；SKIP LOCKED 允许多个实例并行分片处理。
+   */
   async dispatchOnce(): Promise<number> {
     if (this.dispatching) return 0;
     this.dispatching = true;
@@ -82,6 +85,9 @@ export class OutboxDispatcherService
             continue;
           }
           try {
+            /**
+             * generationId 同时作为 jobId，使 Outbox 重投不会创建重复队列任务。
+             */
             await this.queue.add('generate', parsed.data, {
               jobId: parsed.data.generationId,
               attempts: 5,

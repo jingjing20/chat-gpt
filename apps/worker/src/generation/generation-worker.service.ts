@@ -30,6 +30,9 @@ export class GenerationWorkerService
     @Inject(WORKER_ENV) private readonly environment: WorkerEnv,
   ) {}
 
+  /**
+   * 启动 BullMQ 消费者并按配置控制并发，实际供应商请求只在 Worker 进程执行。
+   */
   onApplicationBootstrap(): void {
     this.worker = new Worker<GenerationJob>(
       GENERATION_QUEUE_NAME,

@@ -48,6 +48,9 @@ export class GenerationProcessor {
     @Optional() private readonly reliability?: GenerationReliabilityService,
   ) {}
 
+  /**
+   * 领取 generation 写入权并执行生成；写入令牌防止多个 Worker 同时推进同一任务。
+   */
   async process(generationId: string): Promise<void> {
     const candidate = await this.withDatabaseRetry(() =>
       this.prisma.generation.findUnique({
@@ -122,6 +125,9 @@ export class GenerationProcessor {
     }
   }
 
+  /**
+   * 从数据库 checkpoint 恢复上下文，消费供应商流并持续发布可恢复事件。
+   */
   private async processOwned(
     generationId: string,
     writerToken: string,
@@ -269,6 +275,9 @@ export class GenerationProcessor {
         null;
       let bufferedDelta = '';
       let lastFlushAt = Date.now();
+      /**
+       * 合并微小 token 后再发布，降低 Redis、SSE 和浏览器渲染频率。
+       */
       const flushDelta = async () => {
         if (!bufferedType || !bufferedDelta) return;
         sequence = await this.publishEvent(
@@ -550,6 +559,9 @@ export class GenerationProcessor {
     });
   }
 
+  /**
+   * 仅允许更大的 sequence 推进 checkpoint，避免迟到写入覆盖较新的完整内容。
+   */
   private async writeCheckpoint(input: {
     generationId: string;
     responseMessageId: string;
@@ -645,6 +657,9 @@ export class GenerationProcessor {
     );
   }
 
+  /**
+   * 先原子持久化完整消息和终态，再发布 completed 事件供客户端刷新权威缓存。
+   */
   private async finalizeCompleted(input: FinalizeInput): Promise<boolean> {
     const now = new Date();
     const finalized = await this.prisma.$transaction(async (transaction) => {
@@ -697,6 +712,9 @@ export class GenerationProcessor {
     return finalized;
   }
 
+  /**
+   * 将可安全展示的失败信息持久化后发布终态，避免泄露供应商原始错误内容。
+   */
   private async finalizeFailed(input: FailureInput): Promise<boolean> {
     const now = new Date();
     const finalized = await this.prisma.$transaction(async (transaction) => {

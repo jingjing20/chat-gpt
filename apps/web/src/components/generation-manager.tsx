@@ -8,6 +8,9 @@ import { userEventSchema, type UserEvent } from '@chat/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
+/**
+ * 在路由之上维护用户级 SSE，并把所有对话的 generation 事件归并到全局 store。
+ */
 export function GenerationManager({ userId }: { userId: string }) {
   const queryClient = useQueryClient();
 
@@ -17,6 +20,9 @@ export function GenerationManager({ userId }: { userId: string }) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let initialized = false;
 
+    /**
+     * sequence 出现缺口时优先补拉事件，历史已裁剪时用完整快照收敛本地状态。
+     */
     const resync = async (event: UserEvent) => {
       const current =
         useGenerationStore.getState().generations[event.generationId];
@@ -49,6 +55,9 @@ export function GenerationManager({ userId }: { userId: string }) {
       }
     };
 
+    /**
+     * 首次连接先固定同步快照和用户流游标，之后按持久游标续接 SSE。
+     */
     const connect = async (): Promise<void> => {
       useGenerationStore.getState().setConnectionStatus('connecting');
       const cursorKey = `chat.eventCursor.${userId}`;
@@ -117,6 +126,9 @@ export function GenerationManager({ userId }: { userId: string }) {
       } catch {
         if (controller.signal.aborted) return;
         useGenerationStore.getState().setConnectionStatus('disconnected');
+        /**
+         * 指数退避叠加抖动，避免服务恢复时多个标签同时发起重连。
+         */
         const base = Math.min(15_000, 1_000 * 2 ** retry++);
         const delay = Math.round(base * (0.8 + Math.random() * 0.4));
         timer = setTimeout(() => void connect(), delay);

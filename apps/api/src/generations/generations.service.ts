@@ -36,6 +36,9 @@ export class GenerationsService {
     @Inject(API_ENV) private readonly environment: ApiEnv,
   ) {}
 
+  /**
+   * 幂等创建消息、generation 与 enqueue Outbox；同一事务保证任务记录和入队意图一致。
+   */
   async create(
     userId: string,
     conversationId: string,
@@ -48,6 +51,9 @@ export class GenerationsService {
 
     try {
       return await this.prisma.$transaction(async (transaction) => {
+        /**
+         * 用户级事务锁串行化并发计数，避免多个创建请求同时突破 generation 上限。
+         */
         await transaction.$queryRaw`
           SELECT pg_advisory_xact_lock(hashtext(${userId})) IS NULL AS locked
         `;
@@ -102,6 +108,9 @@ export class GenerationsService {
           where: { id: conversationId },
           data: { lastMessageAt: now },
         });
+        /**
+         * Outbox 与业务数据一同提交，dispatcher 可在 API 崩溃后继续可靠投递任务。
+         */
         await transaction.outboxEvent.create({
           data: {
             aggregateType: 'generation',

@@ -43,6 +43,9 @@ import {
 } from '@/lib/scroll-follow';
 import type { ConversationResponse } from '@chat/contracts';
 
+/**
+ * 把服务端消息缓存与当前对话的实时 overlay 合并，仅渲染该对话的生成状态。
+ */
 export function ConversationView({
   conversationId,
 }: {
@@ -92,6 +95,9 @@ export function ConversationView({
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
+  /**
+   * Zustand 实时内容覆盖 React Query 中的 assistant 占位消息，终态再由数据库收敛。
+   */
   const messages = useMemo(() => {
     const overlayByMessage = new Map(
       overlays.map((overlay) => [overlay.messageId, overlay]),
@@ -227,6 +233,9 @@ export function ConversationView({
       : connectionStatus === 'disconnected'
         ? '实时连接已断开，正在重连；已生成内容不会丢失。'
         : sendMutationErrorMessage();
+  /**
+   * 切回活动对话时定位最新内容，否则恢复用户上次保存的阅读位置。
+   */
   useEffect(() => {
     void markConversationRead(conversationId)
       .then((conversation) => {
@@ -297,6 +306,9 @@ export function ConversationView({
     messagesQuery.isPending,
   ]);
 
+  /**
+   * 仅在用户仍靠近底部时跟随流式内容，向上阅读后不抢夺滚动位置。
+   */
   useLayoutEffect(() => {
     if (!streamingSignature) return;
     const viewport = viewportRef.current;
@@ -331,6 +343,9 @@ export function ConversationView({
     };
   }, [conversationId, persistScrollPosition]);
 
+  /**
+   * 区分程序化滚动与用户滚动，并节流持久化当前对话的阅读位置。
+   */
   function handleScroll() {
     const viewport = viewportRef.current;
     if (viewport) {

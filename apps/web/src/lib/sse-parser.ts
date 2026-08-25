@@ -4,6 +4,9 @@ export interface SseFrame {
   data: string;
 }
 
+/**
+ * 增量解析 SSE 帧并保留跨 HTTP chunk 的残片，避免把网络分块误当成事件边界。
+ */
 export class SseParser {
   private buffer = '';
 

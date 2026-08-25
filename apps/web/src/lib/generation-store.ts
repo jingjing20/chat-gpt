@@ -1,6 +1,9 @@
 import type { GenerationStatus, UserEvent } from '@chat/contracts';
 import { create } from 'zustand';
 
+/**
+ * 单个 generation 的浏览器实时投影，以 generationId 隔离并发对话的增量。
+ */
 export interface ActiveGenerationState {
   generationId: string;
   conversationId: string;
@@ -26,6 +29,9 @@ export function isGenerationActive(status: GenerationStatus): boolean {
   return ACTIVE_GENERATION_STATUSES.includes(status);
 }
 
+/**
+ * 按 generation 内单调 sequence 幂等归并事件；发现缺口时暂停追加并请求补偿。
+ */
 export function reduceGenerationEvent(
   current: ActiveGenerationState | undefined,
   event: UserEvent,
@@ -94,6 +100,9 @@ interface GenerationStore {
   ) => void;
 }
 
+/**
+ * 将用户级 generation 状态投影为当前对话所需的数据集合。
+ */
 export function selectConversationGenerations(conversationId: string) {
   return (store: GenerationStore) =>
     Object.values(store.generations).filter(
@@ -101,6 +110,9 @@ export function selectConversationGenerations(conversationId: string) {
     );
 }
 
+/**
+ * 为侧边栏提取对话活动状态，避免额外轮询每个对话。
+ */
 export function selectConversationActivity(conversationId: string) {
   return (store: GenerationStore) => {
     const generations = Object.values(store.generations).filter(
@@ -115,6 +127,9 @@ export function selectConversationActivity(conversationId: string) {
   };
 }
 
+/**
+ * 页面无关的 generation、连接状态和草稿仓库，路由切换不会清空其中的数据。
+ */
 export const useGenerationStore = create<GenerationStore>((set, get) => ({
   connectionStatus: 'connecting',
   generations: {},

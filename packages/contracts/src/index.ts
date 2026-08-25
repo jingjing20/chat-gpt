@@ -229,6 +229,9 @@ export const generationEventTypeSchema = z.enum([
   'generation.cancelled',
 ]);
 
+/**
+ * 用户级事件信封：conversationId 用于视图投影，generationId 和 sequence 用于隔离与排序。
+ */
 export const userEventSchema = z.object({
   version: z.literal(1),
   eventId: z.string().uuid(),

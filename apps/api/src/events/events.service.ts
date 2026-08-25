@@ -41,6 +41,9 @@ export class EventsService implements OnApplicationShutdown {
     });
   }
 
+  /**
+   * 将用户级 Redis Stream 转为可恢复 SSE，并限制连接数、缓冲区和 drain 等待时间。
+   */
   async stream(
     userId: string,
     after: string,
@@ -137,6 +140,9 @@ export class EventsService implements OnApplicationShutdown {
     }
   }
 
+  /**
+   * 等待响应缓冲区排空；客户端持续过慢时主动断开，让其通过游标重新追赶。
+   */
   private async writeWithBackpressure(
     response: Response,
     chunk: string,
@@ -181,6 +187,9 @@ export class EventsService implements OnApplicationShutdown {
     });
   }
 
+  /**
+   * 校验 generation 归属后读取连续事件；历史被裁剪时降级为 Redis/数据库快照。
+   */
   async history(
     userId: string,
     generationId: string,
@@ -260,6 +269,9 @@ export class EventsService implements OnApplicationShutdown {
     };
   }
 
+  /**
+   * 先固定用户流尾游标，再读取活动任务快照，消除“同步完成到开流之间”的丢事件窗口。
+   */
   async sync(userId: string): Promise<GenerationSyncResponse> {
     const userStream = eventKeys(
       this.environment.EVENT_KEY_PREFIX,

@@ -5,6 +5,13 @@ import nextTs from 'eslint-config-next/typescript';
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    languageOptions: {
+      parserOptions: {
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
   // 覆盖 eslint-config-next 的默认忽略项。
   globalIgnores([
     // eslint-config-next 默认忽略以下目录：

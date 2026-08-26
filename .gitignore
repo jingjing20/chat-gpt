@@ -9,6 +9,8 @@ node_modules/
 coverage/
 playwright-report/
 test-results/
+# 多对话链路实验每次运行生成的原始证据
+artifacts/multi-conversation-trace/
 # Next.js 开发服务器自动生成的代理说明文件
 apps/web/AGENTS.md
 apps/web/CLAUDE.md

@@ -1,0 +1,530 @@
+{
+  "description": "两个对话并发流式输出的一次真实测试运行摘要",
+  "sourceRunId": "2026-08-25T08-34-09-387Z",
+  "realComponents": [
+    "Browser",
+    "Web",
+    "API",
+    "PostgreSQL",
+    "Outbox",
+    "BullMQ",
+    "Worker",
+    "Redis",
+    "SSE"
+  ],
+  "fakeOnly": "外部 LLM 供应商响应",
+  "ids": {
+    "user": "fd02625c-21fd-4d38-91fa-8452f8520042",
+    "conversationA": "8a990e8e-cd8b-4b5b-9dbf-de6621a570e0",
+    "conversationB": "b216f653-3198-4cbd-b21b-c151cedf730f",
+    "generationA": "e4a82a0f-350c-4127-937b-4e4a48e9762b",
+    "generationB": "e0076afd-92ef-4cb9-bfa8-da624347a77b"
+  },
+  "timeline": [
+    {
+      "step": "T0",
+      "action": "00-登录并建立用户级SSE",
+      "capturedAt": "2026-08-25T08:34:10.604Z",
+      "browser": {
+        "currentConversation": null,
+        "activeGenerationCount": 0,
+        "visibleAnswerLength": 0,
+        "sseRequestCount": 1
+      },
+      "postgres": {
+        "conversationCount": 0,
+        "messages": [],
+        "generations": [],
+        "outbox": []
+      },
+      "redisAndQueue": { "userStreamEventCount": 0, "generations": [] }
+    },
+    {
+      "step": "T1",
+      "action": "01-创建两个空对话",
+      "capturedAt": "2026-08-25T08:34:10.997Z",
+      "browser": {
+        "currentConversation": null,
+        "activeGenerationCount": 0,
+        "visibleAnswerLength": 0,
+        "sseRequestCount": 2
+      },
+      "postgres": {
+        "conversationCount": 2,
+        "messages": [],
+        "generations": [],
+        "outbox": []
+      },
+      "redisAndQueue": { "userStreamEventCount": 0, "generations": [] }
+    },
+    {
+      "step": "T2",
+      "action": "02-A开始流式生成",
+      "capturedAt": "2026-08-25T08:34:12.356Z",
+      "browser": {
+        "currentConversation": "链路实验对话 A",
+        "activeGenerationCount": 1,
+        "visibleAnswerLength": 389,
+        "sseRequestCount": 2
+      },
+      "postgres": {
+        "conversationCount": 2,
+        "messages": [
+          {
+            "id": "10dd429e-f828-4526-a5cd-4db94ee86c1f",
+            "conversation": "A",
+            "role": "USER",
+            "status": "COMPLETED",
+            "contentLength": 12
+          },
+          {
+            "id": "4abedf52-a4fe-48b1-bd3c-929531b7b653",
+            "conversation": "A",
+            "role": "ASSISTANT",
+            "status": "STREAMING",
+            "contentLength": 0
+          }
+        ],
+        "generations": [
+          {
+            "id": "e4a82a0f-350c-4127-937b-4e4a48e9762b",
+            "conversation": "A",
+            "status": "STREAMING",
+            "lastSequence": 1,
+            "checkpointSequence": 1,
+            "requestMessageId": "10dd429e-f828-4526-a5cd-4db94ee86c1f",
+            "responseMessageId": "4abedf52-a4fe-48b1-bd3c-929531b7b653"
+          }
+        ],
+        "outbox": [
+          {
+            "generation": "A",
+            "type": "generation.enqueue",
+            "published": true,
+            "attempts": 1
+          }
+        ]
+      },
+      "redisAndQueue": {
+        "userStreamEventCount": 4,
+        "generations": [
+          {
+            "generation": "A",
+            "sequence": 4,
+            "snapshotStatus": "STREAMING",
+            "snapshotContentLength": 381,
+            "generationStreamEventCount": 4,
+            "bullMqJobState": "active"
+          }
+        ]
+      }
+    },
+    {
+      "step": "T3",
+      "action": "03-从A切换到B-A仍在后台生成",
+      "capturedAt": "2026-08-25T08:34:12.591Z",
+      "browser": {
+        "currentConversation": "链路实验对话 B",
+        "activeGenerationCount": 1,
+        "visibleAnswerLength": 0,
+        "sseRequestCount": 2
+      },
+      "postgres": {
+        "conversationCount": 2,
+        "messages": [
+          {
+            "id": "10dd429e-f828-4526-a5cd-4db94ee86c1f",
+            "conversation": "A",
+            "role": "USER",
+            "status": "COMPLETED",
+            "contentLength": 12
+          },
+          {
+            "id": "4abedf52-a4fe-48b1-bd3c-929531b7b653",
+            "conversation": "A",
+            "role": "ASSISTANT",
+            "status": "STREAMING",
+            "contentLength": 0
+          }
+        ],
+        "generations": [
+          {
+            "id": "e4a82a0f-350c-4127-937b-4e4a48e9762b",
+            "conversation": "A",
+            "status": "STREAMING",
+            "lastSequence": 1,
+            "checkpointSequence": 1,
+            "requestMessageId": "10dd429e-f828-4526-a5cd-4db94ee86c1f",
+            "responseMessageId": "4abedf52-a4fe-48b1-bd3c-929531b7b653"
+          }
+        ],
+        "outbox": [
+          {
+            "generation": "A",
+            "type": "generation.enqueue",
+            "published": true,
+            "attempts": 1
+          }
+        ]
+      },
+      "redisAndQueue": {
+        "userStreamEventCount": 8,
+        "generations": [
+          {
+            "generation": "A",
+            "sequence": 8,
+            "snapshotStatus": "STREAMING",
+            "snapshotContentLength": 889,
+            "generationStreamEventCount": 8,
+            "bullMqJobState": "active"
+          }
+        ]
+      }
+    },
+    {
+      "step": "T4",
+      "action": "04-A和B同时流式生成",
+      "capturedAt": "2026-08-25T08:34:12.869Z",
+      "browser": {
+        "currentConversation": "链路实验对话 B",
+        "activeGenerationCount": 2,
+        "visibleAnswerLength": 135,
+        "sseRequestCount": 2
+      },
+      "postgres": {
+        "conversationCount": 2,
+        "messages": [
+          {
+            "id": "10dd429e-f828-4526-a5cd-4db94ee86c1f",
+            "conversation": "A",
+            "role": "USER",
+            "status": "COMPLETED",
+            "contentLength": 12
+          },
+          {
+            "id": "4abedf52-a4fe-48b1-bd3c-929531b7b653",
+            "conversation": "A",
+            "role": "ASSISTANT",
+            "status": "STREAMING",
+            "contentLength": 0
+          },
+          {
+            "id": "71d71d1d-4b8a-405f-a7bd-70bccd2275ab",
+            "conversation": "B",
+            "role": "USER",
+            "status": "COMPLETED",
+            "contentLength": 12
+          },
+          {
+            "id": "7ba254bd-4b51-4f42-af14-be5f76ec52f1",
+            "conversation": "B",
+            "role": "ASSISTANT",
+            "status": "STREAMING",
+            "contentLength": 0
+          }
+        ],
+        "generations": [
+          {
+            "id": "e4a82a0f-350c-4127-937b-4e4a48e9762b",
+            "conversation": "A",
+            "status": "STREAMING",
+            "lastSequence": 1,
+            "checkpointSequence": 1,
+            "requestMessageId": "10dd429e-f828-4526-a5cd-4db94ee86c1f",
+            "responseMessageId": "4abedf52-a4fe-48b1-bd3c-929531b7b653"
+          },
+          {
+            "id": "e0076afd-92ef-4cb9-bfa8-da624347a77b",
+            "conversation": "B",
+            "status": "STREAMING",
+            "lastSequence": 1,
+            "checkpointSequence": 1,
+            "requestMessageId": "71d71d1d-4b8a-405f-a7bd-70bccd2275ab",
+            "responseMessageId": "7ba254bd-4b51-4f42-af14-be5f76ec52f1"
+          }
+        ],
+        "outbox": [
+          {
+            "generation": "A",
+            "type": "generation.enqueue",
+            "published": true,
+            "attempts": 1
+          },
+          {
+            "generation": "B",
+            "type": "generation.enqueue",
+            "published": true,
+            "attempts": 1
+          }
+        ]
+      },
+      "redisAndQueue": {
+        "userStreamEventCount": 16,
+        "generations": [
+          {
+            "generation": "A",
+            "sequence": 14,
+            "snapshotStatus": "STREAMING",
+            "snapshotContentLength": 1655,
+            "generationStreamEventCount": 14,
+            "bullMqJobState": "active"
+          },
+          {
+            "generation": "B",
+            "sequence": 2,
+            "snapshotStatus": "STREAMING",
+            "snapshotContentLength": 127,
+            "generationStreamEventCount": 2,
+            "bullMqJobState": "active"
+          }
+        ]
+      }
+    },
+    {
+      "step": "T5",
+      "action": "05-切回A后内容继续增长",
+      "capturedAt": "2026-08-25T08:34:13.083Z",
+      "browser": {
+        "currentConversation": "链路实验对话 A",
+        "activeGenerationCount": 2,
+        "visibleAnswerLength": 2047,
+        "sseRequestCount": 2
+      },
+      "postgres": {
+        "conversationCount": 2,
+        "messages": [
+          {
+            "id": "10dd429e-f828-4526-a5cd-4db94ee86c1f",
+            "conversation": "A",
+            "role": "USER",
+            "status": "COMPLETED",
+            "contentLength": 12
+          },
+          {
+            "id": "4abedf52-a4fe-48b1-bd3c-929531b7b653",
+            "conversation": "A",
+            "role": "ASSISTANT",
+            "status": "STREAMING",
+            "contentLength": 1783
+          },
+          {
+            "id": "71d71d1d-4b8a-405f-a7bd-70bccd2275ab",
+            "conversation": "B",
+            "role": "USER",
+            "status": "COMPLETED",
+            "contentLength": 12
+          },
+          {
+            "id": "7ba254bd-4b51-4f42-af14-be5f76ec52f1",
+            "conversation": "B",
+            "role": "ASSISTANT",
+            "status": "STREAMING",
+            "contentLength": 0
+          }
+        ],
+        "generations": [
+          {
+            "id": "e4a82a0f-350c-4127-937b-4e4a48e9762b",
+            "conversation": "A",
+            "status": "STREAMING",
+            "lastSequence": 15,
+            "checkpointSequence": 15,
+            "requestMessageId": "10dd429e-f828-4526-a5cd-4db94ee86c1f",
+            "responseMessageId": "4abedf52-a4fe-48b1-bd3c-929531b7b653"
+          },
+          {
+            "id": "e0076afd-92ef-4cb9-bfa8-da624347a77b",
+            "conversation": "B",
+            "status": "STREAMING",
+            "lastSequence": 1,
+            "checkpointSequence": 1,
+            "requestMessageId": "71d71d1d-4b8a-405f-a7bd-70bccd2275ab",
+            "responseMessageId": "7ba254bd-4b51-4f42-af14-be5f76ec52f1"
+          }
+        ],
+        "outbox": [
+          {
+            "generation": "A",
+            "type": "generation.enqueue",
+            "published": true,
+            "attempts": 1
+          },
+          {
+            "generation": "B",
+            "type": "generation.enqueue",
+            "published": true,
+            "attempts": 1
+          }
+        ]
+      },
+      "redisAndQueue": {
+        "userStreamEventCount": 23,
+        "generations": [
+          {
+            "generation": "A",
+            "sequence": 17,
+            "snapshotStatus": "STREAMING",
+            "snapshotContentLength": 2039,
+            "generationStreamEventCount": 17,
+            "bullMqJobState": "active"
+          },
+          {
+            "generation": "B",
+            "sequence": 6,
+            "snapshotStatus": "STREAMING",
+            "snapshotContentLength": 635,
+            "generationStreamEventCount": 6,
+            "bullMqJobState": "active"
+          }
+        ]
+      }
+    },
+    {
+      "step": "T6",
+      "action": "06-A和B全部完成并收敛",
+      "capturedAt": "2026-08-25T08:34:30.124Z",
+      "browser": {
+        "currentConversation": "链路实验对话 A",
+        "activeGenerationCount": 0,
+        "visibleAnswerLength": 38596,
+        "sseRequestCount": 2
+      },
+      "postgres": {
+        "conversationCount": 2,
+        "messages": [
+          {
+            "id": "10dd429e-f828-4526-a5cd-4db94ee86c1f",
+            "conversation": "A",
+            "role": "USER",
+            "status": "COMPLETED",
+            "contentLength": 12
+          },
+          {
+            "id": "4abedf52-a4fe-48b1-bd3c-929531b7b653",
+            "conversation": "A",
+            "role": "ASSISTANT",
+            "status": "COMPLETED",
+            "contentLength": 38592
+          },
+          {
+            "id": "71d71d1d-4b8a-405f-a7bd-70bccd2275ab",
+            "conversation": "B",
+            "role": "USER",
+            "status": "COMPLETED",
+            "contentLength": 12
+          },
+          {
+            "id": "7ba254bd-4b51-4f42-af14-be5f76ec52f1",
+            "conversation": "B",
+            "role": "ASSISTANT",
+            "status": "COMPLETED",
+            "contentLength": 38592
+          }
+        ],
+        "generations": [
+          {
+            "id": "e4a82a0f-350c-4127-937b-4e4a48e9762b",
+            "conversation": "A",
+            "status": "COMPLETED",
+            "lastSequence": 302,
+            "checkpointSequence": 302,
+            "requestMessageId": "10dd429e-f828-4526-a5cd-4db94ee86c1f",
+            "responseMessageId": "4abedf52-a4fe-48b1-bd3c-929531b7b653"
+          },
+          {
+            "id": "e0076afd-92ef-4cb9-bfa8-da624347a77b",
+            "conversation": "B",
+            "status": "COMPLETED",
+            "lastSequence": 302,
+            "checkpointSequence": 302,
+            "requestMessageId": "71d71d1d-4b8a-405f-a7bd-70bccd2275ab",
+            "responseMessageId": "7ba254bd-4b51-4f42-af14-be5f76ec52f1"
+          }
+        ],
+        "outbox": [
+          {
+            "generation": "A",
+            "type": "generation.enqueue",
+            "published": true,
+            "attempts": 1
+          },
+          {
+            "generation": "B",
+            "type": "generation.enqueue",
+            "published": true,
+            "attempts": 1
+          }
+        ]
+      },
+      "redisAndQueue": {
+        "userStreamEventCount": 604,
+        "generations": [
+          {
+            "generation": "A",
+            "sequence": 302,
+            "snapshotStatus": "COMPLETED",
+            "snapshotContentLength": 38592,
+            "generationStreamEventCount": 302,
+            "bullMqJobState": "completed"
+          },
+          {
+            "generation": "B",
+            "sequence": 302,
+            "snapshotStatus": "COMPLETED",
+            "snapshotContentLength": 38592,
+            "generationStreamEventCount": 302,
+            "bullMqJobState": "completed"
+          }
+        ]
+      }
+    }
+  ],
+  "actualInterleaving": [
+    {
+      "userStreamId": "1787646852756-0",
+      "conversation": "A",
+      "generation": "A",
+      "type": "message.delta",
+      "sequence": 12,
+      "occurredAt": "2026-08-25T08:34:12.745Z"
+    },
+    {
+      "userStreamId": "1787646852778-0",
+      "conversation": "B",
+      "generation": "B",
+      "type": "generation.started",
+      "sequence": 1,
+      "occurredAt": "2026-08-25T08:34:12.776Z"
+    },
+    {
+      "userStreamId": "1787646852809-0",
+      "conversation": "A",
+      "generation": "A",
+      "type": "message.delta",
+      "sequence": 13,
+      "occurredAt": "2026-08-25T08:34:12.808Z"
+    },
+    {
+      "userStreamId": "1787646852842-0",
+      "conversation": "B",
+      "generation": "B",
+      "type": "message.delta",
+      "sequence": 2,
+      "occurredAt": "2026-08-25T08:34:12.842Z"
+    },
+    {
+      "userStreamId": "1787646852861-0",
+      "conversation": "A",
+      "generation": "A",
+      "type": "message.delta",
+      "sequence": 14,
+      "occurredAt": "2026-08-25T08:34:12.860Z"
+    }
+  ],
+  "finalCheck": {
+    "userStreamEventCount": 604,
+    "expectedEventCount": 604,
+    "postgresAndRedisContentLength": 38592,
+    "newSseRequestsDuringConversationSwitching": 0
+  }
+}

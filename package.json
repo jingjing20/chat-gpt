@@ -43,9 +43,15 @@
     "reliability:native-restart": "bash tests/reliability/native-restart-drill.sh",
     "operations:postgres-restore": "bash tests/operations/postgres-restore-drill.sh",
     "operations:verify-alerts": "bash tests/operations/verify-alerts.sh",
-    "operations:alert-delivery": "node tests/operations/alert-delivery-drill.mjs"
+    "operations:alert-delivery": "node tests/operations/alert-delivery-drill.mjs",
+    "trace:multi-conversation": "DATABASE_URL=${TEST_DATABASE_URL:-postgresql://chat:chat_local_password@localhost:15432/chat_test?schema=public} pnpm test:e2e:prepare && CHAT_TRACE=1 playwright test --config tests/multi-conversation-trace/playwright.config.ts",
+    "trace:multi-conversation:export-example": "node scripts/export-multi-conversation-trace-example.mjs"
   },
   "devDependencies": {
+    "@chat/database": "workspace:*",
+    "@playwright/test": "^1.58.2",
+    "bullmq": "^5.58.5",
+    "ioredis": "^5.7.0",
     "prettier": "^3.6.2",
     "turbo": "^2.5.6",
     "typescript": "^5.9.2"

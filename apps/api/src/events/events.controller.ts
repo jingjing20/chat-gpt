@@ -1,3 +1,5 @@
+/** 提供用户级 SSE 事件流、历史补偿和活动 generation 同步接口。 */
+
 import { Controller, Get, Param, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { z } from 'zod';

@@ -1,3 +1,5 @@
+/** 定义 API 应用的 TypeScript、测试文件与构建产物 ESLint 检查规则。 */
+
 // @ts-check
 import eslint from '@eslint/js';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';

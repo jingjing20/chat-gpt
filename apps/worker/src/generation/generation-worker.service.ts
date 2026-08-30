@@ -1,3 +1,5 @@
+/** 启动 BullMQ Worker，并把队列任务交给 generation 处理器。 */
+
 import { redisConnectionOptions, type WorkerEnv } from '@chat/config';
 import { generationJobSchema, type GenerationJob } from '@chat/contracts';
 import {

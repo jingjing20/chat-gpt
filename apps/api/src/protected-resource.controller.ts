@@ -1,3 +1,5 @@
+/** 提供用于验证访问令牌和全局认证守卫的受保护示例接口。 */
+
 import type { ProtectedResourceResponse } from '@chat/contracts';
 import {
   Controller,

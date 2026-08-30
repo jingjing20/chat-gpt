@@ -1,3 +1,5 @@
+/** 组装认证控制器、令牌安全服务及认证相关全局守卫。 */
+
 import type { ApiEnv } from '@chat/config';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';

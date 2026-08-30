@@ -1,3 +1,5 @@
+/** 把 OpenAI 兼容 Chat Completions 请求与 SSE 响应转换为标准模型事件。 */
+
 import { mapHttpError, ProviderError } from './provider-error';
 import { parseDataOnlySse } from './sse-parser';
 import type {
@@ -30,6 +32,7 @@ export class OpenAiCompatibleAdapter implements LlmProviderAdapter {
     this.fetch = options.fetch ?? globalThis.fetch;
   }
 
+  /** 发起可中止的流式请求，并将供应商 SSE 分片归一化为领域事件。 */
   async *streamChat(
     request: NormalizedChatRequest,
     signal: AbortSignal,
@@ -95,6 +98,7 @@ export class OpenAiCompatibleAdapter implements LlmProviderAdapter {
     }
   }
 
+  /** 只映射标准 Chat Completions 字段，避免业务层依赖供应商专属结构。 */
   private toProviderRequest(
     request: NormalizedChatRequest,
   ): Record<string, unknown> {
@@ -148,6 +152,7 @@ export class OpenAiCompatibleAdapter implements LlmProviderAdapter {
       yield { type: 'usage', usage: normalizeUsage(chunk.usage) };
   }
 
+  /** 区分调用方取消、适配器超时和网络故障，以决定上层是否可重试。 */
   private mapFetchError(cause: unknown, timedOut: boolean): ProviderError {
     if (timedOut) {
       return new ProviderError({

@@ -1,3 +1,5 @@
+/** 暴露按当前用户隔离的对话、消息、归档和阅读状态 REST 接口。 */
+
 import {
   createConversationRequestSchema,
   createMessageRequestSchema,

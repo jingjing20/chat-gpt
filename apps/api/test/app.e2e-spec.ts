@@ -1,3 +1,5 @@
+/** 端到端验证 API 健康检查、认证会话、CSRF、限流与访问控制。 */
+
 import type { INestApplication } from '@nestjs/common';
 import { authResponseSchema, csrfResponseSchema } from '@chat/contracts';
 import { Test, type TestingModule } from '@nestjs/testing';

@@ -1,3 +1,5 @@
+/** 原子发布 generation 事件，并维护可重放事件流、快照与活动集合。 */
+
 import { redisConnectionOptions, type WorkerEnv } from '@chat/config';
 import type { GenerationEventType, UserEvent } from '@chat/contracts';
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
@@ -64,6 +66,7 @@ export class EventPublisherService implements OnApplicationShutdown {
   /**
    * 使用 eventId 去重并有限重试，确保一次逻辑事件在两类 Stream 中共享同一 sequence。
    */
+  /** 通过 Lua 一次性分配序号、追加事件、刷新快照并维护活动集合。 */
   async publish(input: PublishGenerationEventInput): Promise<UserEvent> {
     const keys = eventKeys(this.prefix, input.userId, input.generationId);
     const base = {

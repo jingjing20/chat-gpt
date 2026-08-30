@@ -1,3 +1,5 @@
+/** 以 Prometheus 文本格式暴露 Worker 进程指标。 */
+
 import { metrics, recordProcessMetrics } from '@chat/observability';
 import { Controller, Get, Header } from '@nestjs/common';
 

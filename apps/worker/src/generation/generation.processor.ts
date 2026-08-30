@@ -1,3 +1,5 @@
+/** 执行 generation 状态机、上下文构建、模型流消费、检查点和最终持久化。 */
+
 import type { WorkerEnv } from '@chat/config';
 import {
   GenerationAttemptStatus,
@@ -51,6 +53,7 @@ export class GenerationProcessor {
   /**
    * 领取 generation 写入权并执行生成；写入令牌防止多个 Worker 同时推进同一任务。
    */
+  /** 获取分布式执行许可，并确保任何退出路径最终释放租约和并发槽。 */
   async process(generationId: string): Promise<void> {
     const candidate = await this.withDatabaseRetry(() =>
       this.prisma.generation.findUnique({
@@ -127,6 +130,10 @@ export class GenerationProcessor {
 
   /**
    * 从数据库 checkpoint 恢复上下文，消费供应商流并持续发布可恢复事件。
+   */
+  /**
+   * 驱动单次 generation：条件认领状态、消费模型流、发布增量，
+   * 并按“首个 delta 前可重试、之后保留部分结果”的边界处理失败。
    */
   private async processOwned(
     generationId: string,
@@ -513,6 +520,7 @@ export class GenerationProcessor {
     }
   }
 
+  /** 发布事件后同步数据库 lastSequence，使 PostgreSQL 快照与 Redis 游标可核对。 */
   private async publishEvent(
     generation: {
       userId: string;
@@ -562,6 +570,7 @@ export class GenerationProcessor {
   /**
    * 仅允许更大的 sequence 推进 checkpoint，避免迟到写入覆盖较新的完整内容。
    */
+  /** 按字符数或时间阈值批量持久化部分内容，避免每个 token 都开启事务。 */
   private async writeCheckpoint(input: {
     generationId: string;
     responseMessageId: string;
@@ -618,6 +627,7 @@ export class GenerationProcessor {
     }));
   }
 
+  /** 仅允许当前运行任务从 STARTED 进入 STREAMING，防止覆盖并发取消。 */
   private async markStreaming(
     generationId: string,
     responseMessageId: string,
@@ -660,6 +670,7 @@ export class GenerationProcessor {
   /**
    * 先原子持久化完整消息和终态，再发布 completed 事件供客户端刷新权威缓存。
    */
+  /** 原子写入最终助手消息、用量和完成状态，数据库结果作为长期权威事实。 */
   private async finalizeCompleted(input: FinalizeInput): Promise<boolean> {
     const now = new Date();
     const finalized = await this.prisma.$transaction(async (transaction) => {
@@ -715,6 +726,7 @@ export class GenerationProcessor {
   /**
    * 将可安全展示的失败信息持久化后发布终态，避免泄露供应商原始错误内容。
    */
+  /** 保存可用的部分输出和标准错误码，并以条件更新避免覆盖终态。 */
   private async finalizeFailed(input: FailureInput): Promise<boolean> {
     const now = new Date();
     const finalized = await this.prisma.$transaction(async (transaction) => {
@@ -767,6 +779,7 @@ export class GenerationProcessor {
     return finalized;
   }
 
+  /** 固化取消前已产生的内容，并发布与数据库一致的取消终态。 */
   private async finalizeCancelled(
     generationId: string,
     content: string,
@@ -881,6 +894,7 @@ export class GenerationProcessor {
     return generation?.status === GenerationStatus.CANCEL_REQUESTED;
   }
 
+  /** 同时续期分布式租约和数据库心跳；任一所有权丢失都终止本次执行。 */
   private async heartbeat(
     generationId: string,
     writerToken: string,
@@ -907,6 +921,7 @@ export class GenerationProcessor {
     }
   }
 
+  /** 将供应商、取消、超时和数据库异常归一化为稳定的重试与展示语义。 */
   private normalizeError(
     error: unknown,
     receivedFirstDelta: boolean,

@@ -1,3 +1,5 @@
+/** 组装 API 根模块，并为 HTTP 请求挂载请求标识与可观测性中间件。 */
+
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
 import { AppConfigModule } from './config/app-config.module';

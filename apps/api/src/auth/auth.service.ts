@@ -1,3 +1,5 @@
+/** 实现用户注册、登录、会话轮换、退出和安全审计等认证业务。 */
+
 import type {
   AuthResponse,
   LoginRequest,
@@ -37,6 +39,7 @@ export class AuthService {
     this.dummyHash = argon2.hash(randomBytes(32), { type: argon2.argon2id });
   }
 
+  /** 创建用户与首个刷新会话，并返回可写入 Cookie 的令牌组合。 */
   async register(
     input: RegisterRequest,
     context: RequestContext,
@@ -82,6 +85,7 @@ export class AuthService {
     }
   }
 
+  /** 校验凭据后新建独立会话；失败审计只保存不可逆摘要。 */
   async login(
     input: LoginRequest,
     context: RequestContext,
@@ -131,6 +135,7 @@ export class AuthService {
     return this.authResult(user, refreshToken, csrfToken);
   }
 
+  /** 轮换一次性刷新令牌，拒绝已撤销、过期或疑似重放的会话。 */
   async refresh(
     refreshToken: string | undefined,
     context: RequestContext,
@@ -193,6 +198,7 @@ export class AuthService {
     return this.authResult(session.user, replacement, csrfToken);
   }
 
+  /** 仅撤销当前刷新会话，保证其他设备上的会话不受影响。 */
   async logout(
     userId: string,
     refreshToken: string | undefined,
@@ -273,6 +279,7 @@ export class AuthService {
     };
   }
 
+  /** 记录不含原始令牌、邮箱或消息内容的会话拒绝审计事件。 */
   private async recordRejectedSession(
     userId: string | undefined,
     tokenHash: string,

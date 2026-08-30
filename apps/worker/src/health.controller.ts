@@ -1,3 +1,5 @@
+/** 提供 Worker 进程存活和就绪探针。 */
+
 import type { HealthResponse } from '@chat/contracts';
 import { Controller, Get } from '@nestjs/common';
 

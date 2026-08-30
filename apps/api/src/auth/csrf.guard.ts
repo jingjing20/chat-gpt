@@ -1,3 +1,5 @@
+/** 对需要保护的非安全 HTTP 方法执行双提交 Cookie CSRF 校验。 */
+
 import {
   CanActivate,
   ExecutionContext,

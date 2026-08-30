@@ -1,3 +1,5 @@
+/** 估算聊天消息 token，并在模型上下文预算内裁剪和截断消息。 */
+
 import type { NormalizedChatMessage } from '@chat/llm';
 
 export interface ModelProfile {
@@ -22,6 +24,7 @@ const MESSAGE_OVERHEAD_TOKENS = 4;
  * 这是用于预算保护的保守估算，不用于计费。中文按每字一个 token、ASCII
  * 按四字符一个 token 估算，并为消息结构保留固定开销。
  */
+/** 使用保守字符近似值估算消息 token，避免未接入分词器时突破模型上限。 */
 export function estimateMessageTokens(message: NormalizedChatMessage): number {
   let asciiCharacters = 0;
   let nonAsciiCharacters = 0;
@@ -56,6 +59,7 @@ function truncateToTokenBudget(
 }
 
 /** 保留 system 和最近轮次，普通历史从最旧消息开始整条裁剪。 */
+/** 优先保留系统提示与最新消息，在输入预算内从近到远装配上下文。 */
 export function fitMessagesToContextWindow(
   messages: NormalizedChatMessage[],
   profile: ModelProfile,
@@ -124,6 +128,7 @@ export function fitMessagesToContextWindow(
   };
 }
 
+/** 把运行时模型限制转换为上下文裁剪所需的统一配置。 */
 export function createConfiguredModelProfile(input: {
   provider: string;
   model: string;

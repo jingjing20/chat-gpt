@@ -1,3 +1,5 @@
+/** 从 Redis 重放用户事件、维持实时 SSE 连接并提供快照恢复数据。 */
+
 import { redisConnectionOptions, type ApiEnv } from '@chat/config';
 import {
   generationStatusSchema,
@@ -44,6 +46,7 @@ export class EventsService implements OnApplicationShutdown {
   /**
    * 将用户级 Redis Stream 转为可恢复 SSE，并限制连接数、缓冲区和 drain 等待时间。
    */
+  /** 先重放游标后的历史事件，再阻塞读取新事件，并用心跳维持 SSE 连接。 */
   async stream(
     userId: string,
     after: string,
@@ -143,6 +146,7 @@ export class EventsService implements OnApplicationShutdown {
   /**
    * 等待响应缓冲区排空；客户端持续过慢时主动断开，让其通过游标重新追赶。
    */
+  /** 尊重 HTTP 响应背压；客户端断开时立即停止继续读取 Redis。 */
   private async writeWithBackpressure(
     response: Response,
     chunk: string,
@@ -190,6 +194,7 @@ export class EventsService implements OnApplicationShutdown {
   /**
    * 校验 generation 归属后读取连续事件；历史被裁剪时降级为 Redis/数据库快照。
    */
+  /** 在保留窗口内返回精确事件，否则返回 replace 语义的权威快照。 */
   async history(
     userId: string,
     generationId: string,
@@ -272,6 +277,7 @@ export class EventsService implements OnApplicationShutdown {
   /**
    * 先固定用户流尾游标，再读取活动任务快照，消除“同步完成到开流之间”的丢事件窗口。
    */
+  /** 汇总用户全部活动 generation 快照，供刷新或新标签页恢复。 */
   async sync(userId: string): Promise<GenerationSyncResponse> {
     const userStream = eventKeys(
       this.environment.EVENT_KEY_PREFIX,

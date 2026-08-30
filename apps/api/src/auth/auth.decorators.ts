@@ -1,3 +1,5 @@
+/** 提供声明公开路由、跳过 CSRF 和启用认证限流的装饰器。 */
+
 import { SetMetadata } from '@nestjs/common';
 import {
   AUTH_RATE_LIMIT_KEY,

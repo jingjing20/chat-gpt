@@ -1,3 +1,5 @@
+/** 实现 generation 幂等创建、用户授权查询、取消和重试状态管理。 */
+
 import type {
   CreateGenerationRequest,
   CreateGenerationResponse,
@@ -39,6 +41,7 @@ export class GenerationsService {
   /**
    * 幂等创建消息、generation 与 enqueue Outbox；同一事务保证任务记录和入队意图一致。
    */
+  /** 在单事务中写入消息、generation 与 Outbox，并按请求摘要保证幂等。 */
   async create(
     userId: string,
     conversationId: string,
@@ -148,6 +151,7 @@ export class GenerationsService {
     return this.toGeneration(generation);
   }
 
+  /** 通过条件状态转换请求取消，终态任务保持不可变。 */
   async cancel(
     userId: string,
     generationId: string,
@@ -201,6 +205,7 @@ export class GenerationsService {
     };
   }
 
+  /** 为失败 generation 创建新任务，保留原任务及尝试记录作为审计事实。 */
   async retry(
     userId: string,
     sourceGenerationId: string,
@@ -310,6 +315,7 @@ export class GenerationsService {
     });
   }
 
+  /** 同一幂等键仅在请求摘要一致时复用，否则明确报告冲突。 */
   private resolveExisting(
     existing: NonNullable<
       Awaited<ReturnType<GenerationsService['findByIdempotencyKey']>>
@@ -331,6 +337,7 @@ export class GenerationsService {
     };
   }
 
+  /** 对影响创建语义的规范化字段生成稳定摘要，用于检测幂等键误用。 */
   private hashRequest(
     conversationId: string,
     request: CreateGenerationRequest,

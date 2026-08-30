@@ -1,3 +1,5 @@
+/** 验证 Redis 事件记录解析、排序和无效数据过滤行为。 */
+
 import { readApiEnv } from '@chat/config';
 import { EventEmitter } from 'node:events';
 import type { Response } from 'express';

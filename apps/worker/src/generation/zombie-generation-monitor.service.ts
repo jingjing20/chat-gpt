@@ -1,3 +1,5 @@
+/** 扫描超时 generation，将失效任务安全转换为失败并发布终止事件。 */
+
 import { redisConnectionOptions, type WorkerEnv } from '@chat/config';
 import {
   GenerationAttemptStatus,
@@ -43,6 +45,7 @@ export class ZombieGenerationMonitorService
     this.timer.unref();
   }
 
+  /** 查找心跳超时的活动任务，并通过条件更新避免误杀已恢复或已结束的任务。 */
   async checkOnce(): Promise<number> {
     if (this.checking) return 0;
     this.checking = true;

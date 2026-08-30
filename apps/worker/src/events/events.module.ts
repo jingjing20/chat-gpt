@@ -1,3 +1,5 @@
+/** 注册 Redis generation 事件发布服务。 */
+
 import { Module } from '@nestjs/common';
 import { EventPublisherService } from './event-publisher.service';
 

@@ -1,3 +1,5 @@
+/** 端到端验证 generation 幂等提交、查询、取消、重试及授权路径。 */
+
 import {
   authResponseSchema,
   conversationResponseSchema,

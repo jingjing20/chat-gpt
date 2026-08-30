@@ -1,3 +1,5 @@
+/** 管理 API 进程中 Prisma 客户端随 Nest 生命周期的连接与释放。 */
+
 import { PrismaClient } from '@chat/database';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 

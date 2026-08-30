@@ -1,3 +1,5 @@
+/** 集中定义认证 Cookie 名称以及守卫读取的路由元数据键。 */
+
 export const ACCESS_COOKIE = 'chat_access';
 export const REFRESH_COOKIE = 'chat_refresh';
 export const CSRF_COOKIE = 'chat_csrf';

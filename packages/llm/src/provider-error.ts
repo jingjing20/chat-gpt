@@ -1,3 +1,5 @@
+/** 定义标准供应商错误，并把 HTTP 状态映射为稳定错误码。 */
+
 import type { ProviderErrorCode } from './types';
 
 export class ProviderError extends Error {

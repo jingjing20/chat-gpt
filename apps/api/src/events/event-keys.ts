@@ -1,3 +1,5 @@
+/** 生成用户事件流、活动任务集合及 generation 快照的 Redis 键。 */
+
 export function eventKeys(
   prefix: string,
   userId: string,

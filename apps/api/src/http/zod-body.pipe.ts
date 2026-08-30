@@ -1,3 +1,5 @@
+/** 使用指定 Zod Schema 校验和规范化 HTTP 请求体。 */
+
 import { ApiException } from './api-exception';
 import { HttpStatus, Injectable, type PipeTransform } from '@nestjs/common';
 import type { ZodType } from 'zod';

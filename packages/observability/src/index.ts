@@ -1,3 +1,5 @@
+/** 提供日志脱敏、分布式追踪、OpenTelemetry 和进程指标基础设施。 */
+
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes } from 'node:crypto';
 import {
@@ -25,6 +27,7 @@ const sensitiveKey =
 const bearer = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const cookie = /\b(?:access_token|refresh_token|session)=[^;\s]+/gi;
 
+/** 递归移除敏感键和值中的令牌片段，确保日志默认不泄露用户秘密。 */
 export function redact(value: unknown, key = ''): unknown {
   if (sensitiveKey.test(key)) return '[REDACTED]';
   if (typeof value === 'string') {
@@ -55,6 +58,7 @@ export function parseTraceparent(
   return { traceId: traceId.toLowerCase(), spanId: spanId.toLowerCase() };
 }
 
+/** 接续合法上游 traceparent；无上游时创建新的根追踪上下文。 */
 export function createTraceContext(
   input: Partial<TraceContext> = {},
 ): TraceContext {
@@ -117,6 +121,7 @@ export function finishTelemetrySpan(span: Span, statusCode: number): void {
   span.end();
 }
 
+/** 在异步本地上下文中执行回调，并统一完成 span 状态与异常记录。 */
 export async function runWithTelemetrySpan<T>(
   name: string,
   attributes: Attributes,
@@ -223,6 +228,7 @@ export class MetricsRegistry {
     this.histograms.set(name, values);
   }
 
+  /** 将当前计数器、仪表和直方图快照序列化为 Prometheus exposition 格式。 */
   render(): string {
     const lines: string[] = [];
     for (const [type, collection] of [
@@ -284,6 +290,7 @@ export function recordProcessMetrics(service: string): void {
   metrics.gauge('nodejs_external_memory_bytes', memory.external, { service });
 }
 
+/** 输出经过脱敏且附带当前追踪标识的单行 JSON 日志。 */
 export function structuredLog(
   level: string,
   message: unknown,

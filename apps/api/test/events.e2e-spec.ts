@@ -1,3 +1,5 @@
+/** 端到端验证事件历史重放、快照回退、同步和用户级隔离。 */
+
 import {
   authResponseSchema,
   conversationResponseSchema,

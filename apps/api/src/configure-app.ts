@@ -1,3 +1,5 @@
+/** 统一配置 API 前缀、Cookie、跨域、校验管道和异常响应。 */
+
 import {
   ValidationPipe,
   type INestApplication,

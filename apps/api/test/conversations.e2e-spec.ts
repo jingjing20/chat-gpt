@@ -1,3 +1,5 @@
+/** 端到端验证对话生命周期、消息分页、归档恢复及用户数据隔离。 */
+
 import type { INestApplication } from '@nestjs/common';
 import {
   authResponseSchema,

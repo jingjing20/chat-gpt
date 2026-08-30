@@ -1,3 +1,5 @@
+/** 将业务异常、Nest HTTP 异常和未知异常统一转换为安全 API 错误响应。 */
+
 import type { ErrorResponse } from '@chat/contracts';
 import {
   ArgumentsHost,
@@ -19,6 +21,7 @@ interface KnownErrorBody {
 export class ApiExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(ApiExceptionFilter.name);
 
+  /** 保留已知业务错误码，同时隐藏未知异常细节并关联请求标识。 */
   catch(exception: unknown, host: ArgumentsHost): void {
     const context = host.switchToHttp();
     const request = context.getRequest<Request>();

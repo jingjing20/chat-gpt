@@ -1,3 +1,5 @@
+/** 定义并校验 API、Worker 与 Web 环境配置及 Redis 连接参数。 */
+
 import { z } from 'zod';
 
 const nodeEnvSchema = z.enum(['development', 'test', 'production']);
@@ -163,10 +165,12 @@ export type ApiEnv = z.infer<typeof apiEnvSchema>;
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;
 export type WebEnv = z.infer<typeof webEnvSchema>;
 
+/** 在 API 启动边界解析环境变量，配置不合法时立即失败。 */
 export function readApiEnv(environment: NodeJS.ProcessEnv): ApiEnv {
   return apiEnvSchema.parse(environment);
 }
 
+/** 在 Worker 启动边界解析供应商、队列、租约与基础设施配置。 */
 export function readWorkerEnv(environment: NodeJS.ProcessEnv): WorkerEnv {
   return workerEnvSchema.parse(environment);
 }
@@ -175,6 +179,7 @@ export function readWebEnv(environment: NodeJS.ProcessEnv): WebEnv {
   return webEnvSchema.parse(environment);
 }
 
+/** 把 Redis URL 转换为 BullMQ/ioredis 可复用且显式的连接参数。 */
 export function redisConnectionOptions(redisUrl: string): {
   host: string;
   port: number;

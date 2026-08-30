@@ -1,3 +1,5 @@
+/** 通过 Redis 实现用户并发许可和 generation 分布式租约。 */
+
 import { redisConnectionOptions, type WorkerEnv } from '@chat/config';
 import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import Redis from 'ioredis';
@@ -26,6 +28,7 @@ export class GenerationReliabilityService implements OnApplicationShutdown {
     });
   }
 
+  /** 原子获取 generation 租约和用户并发槽，阻止重复消费与超额并发。 */
   async acquire(input: {
     generationId: string;
     userId: string;
@@ -87,6 +90,7 @@ export class GenerationReliabilityService implements OnApplicationShutdown {
     return null;
   }
 
+  /** 仅由当前租约令牌持有者续期，避免旧 Worker 延长新任务的租约。 */
   async renew(permit: GenerationPermit): Promise<boolean> {
     const renewed = Number(
       await this.redis.eval(
@@ -111,6 +115,7 @@ export class GenerationReliabilityService implements OnApplicationShutdown {
     return renewed === permit.keys.length;
   }
 
+  /** 仅释放与令牌匹配的租约及其用户并发槽。 */
   async release(permit: GenerationPermit): Promise<void> {
     await this.redis.eval(
       `for i = 1, #KEYS do redis.call('ZREM', KEYS[i], ARGV[1]) end return 1`,

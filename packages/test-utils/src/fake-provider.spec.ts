@@ -1,3 +1,5 @@
+/** 验证可编排假模型供应商的事件、错误、延迟和中止行为。 */
+
 import { ProviderError } from '@chat/llm';
 import { FakeLlmProvider } from './fake-provider';
 

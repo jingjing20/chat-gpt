@@ -1,3 +1,5 @@
+/** 验证 OpenAI 兼容流响应解析、错误映射、超时和中止处理。 */
+
 import { OpenAiCompatibleAdapter } from './openai-compatible-adapter';
 import { ProviderError, mapHttpError } from './provider-error';
 import { parseDataOnlySse } from './sse-parser';

@@ -1,3 +1,5 @@
+/** 封装 JWT、不可逆令牌摘要、审计脱敏摘要和安全比较操作。 */
+
 import type { ApiEnv } from '@chat/config';
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';

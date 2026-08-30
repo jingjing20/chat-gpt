@@ -1,3 +1,5 @@
+/** 集中定义跨进程传输的 Zod Schema 与共享 DTO 类型。 */
+
 import { z } from 'zod';
 
 export const serviceNameSchema = z.enum(['api', 'worker']);

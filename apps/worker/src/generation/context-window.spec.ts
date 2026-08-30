@@ -1,3 +1,5 @@
+/** 验证上下文 token 估算、旧消息裁剪和单消息截断策略。 */
+
 import type { NormalizedChatMessage } from '@chat/llm';
 import {
   createConfiguredModelProfile,

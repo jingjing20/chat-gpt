@@ -1,3 +1,5 @@
+/** 验证 generation 处理器的可重试错误分类规则。 */
+
 import { GenerationProcessor } from './generation.processor';
 
 describe('GenerationProcessor 数据库短暂故障恢复', () => {

@@ -1,3 +1,5 @@
+/** 端到端验证生成消费、模型增量、取消、失败和最终持久化链路。 */
+
 import { readWorkerEnv, redisConnectionOptions } from '@chat/config';
 import {
   GenerationStatus,

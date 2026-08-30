@@ -1,3 +1,6 @@
+/** 增量解析仅包含 data 字段的 SSE 字节流。 */
+
+/** 跨任意字节分片累积 SSE 帧，仅产出完整 data 载荷并忽略注释心跳。 */
 export async function* parseDataOnlySse(
   body: ReadableStream<Uint8Array>,
 ): AsyncIterable<string> {

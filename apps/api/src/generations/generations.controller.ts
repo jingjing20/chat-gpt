@@ -1,3 +1,5 @@
+/** 暴露 generation 创建、查询、取消和执行尝试记录接口。 */
+
 import {
   createGenerationRequestSchema,
   type CreateGenerationRequest,

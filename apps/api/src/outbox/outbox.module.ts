@@ -1,3 +1,5 @@
+/** 创建 BullMQ generation 队列并注册 Outbox 分发器。 */
+
 import { redisConnectionOptions, type ApiEnv } from '@chat/config';
 import { Logger, Module } from '@nestjs/common';
 import { Queue } from 'bullmq';

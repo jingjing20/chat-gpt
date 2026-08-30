@@ -1,3 +1,5 @@
+/** 根据环境配置注入真实、开发或浏览器端到端测试模型适配器。 */
+
 import type { WorkerEnv } from '@chat/config';
 import {
   OpenAiCompatibleAdapter,

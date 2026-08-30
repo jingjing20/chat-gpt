@@ -1,3 +1,5 @@
+/** 从进程环境变量加载并校验 Worker 运行时配置。 */
+
 import { readWorkerEnv, type WorkerEnv } from '@chat/config';
 import { config as loadEnv } from 'dotenv';
 import { resolve } from 'node:path';

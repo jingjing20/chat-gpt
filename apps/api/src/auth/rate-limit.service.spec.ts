@@ -1,3 +1,5 @@
+/** 验证固定窗口限流的计数、过期重置和拒绝等待时间。 */
+
 import type { ApiEnv } from '@chat/config';
 import { RateLimitService } from './rate-limit.service';
 

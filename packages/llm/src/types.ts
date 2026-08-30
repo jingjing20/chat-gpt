@@ -1,3 +1,5 @@
+/** 定义供应商无关的聊天请求、流事件、用量、错误和适配器接口。 */
+
 export type NormalizedChatRole = 'system' | 'user' | 'assistant';
 
 export type NormalizedChatMessage = {

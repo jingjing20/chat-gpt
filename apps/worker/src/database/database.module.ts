@@ -1,3 +1,5 @@
+/** 向 Worker 各模块全局提供 Prisma 数据库连接。 */
+
 import { Global, Module } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 

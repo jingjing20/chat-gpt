@@ -1,3 +1,5 @@
+/** 组装 generation 消费、可靠性、供应商和事件发布组件。 */
+
 import { Module } from '@nestjs/common';
 import { GenerationProcessor } from './generation.processor';
 import { GenerationWorkerService } from './generation-worker.service';

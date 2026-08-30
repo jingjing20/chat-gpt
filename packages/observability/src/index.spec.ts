@@ -1,3 +1,5 @@
+/** 验证日志脱敏、追踪上下文、指标聚合和 Prometheus 输出。 */
+
 import {
   createTraceContext,
   finishTelemetrySpan,

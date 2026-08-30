@@ -1,3 +1,5 @@
+/** 提供自动化测试可编排的假 LLM 供应商适配器。 */
+
 import {
   ProviderError,
   type LlmProviderAdapter,
@@ -22,6 +24,7 @@ export class FakeLlmProvider implements LlmProviderAdapter {
     private readonly attemptScripts?: FakeProviderStep[][],
   ) {}
 
+  /** 按预设步骤可重复地产生增量、延迟或错误，并响应 AbortSignal。 */
   async *streamChat(
     request: NormalizedChatRequest,
     signal: AbortSignal,

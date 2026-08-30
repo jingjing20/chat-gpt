@@ -1,3 +1,5 @@
+/** 验证 API 存活探针和数据库就绪探针的响应。 */
+
 import { HealthController } from './health.controller';
 import type { PrismaService } from './database/prisma.service';
 

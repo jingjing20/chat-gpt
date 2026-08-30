@@ -1,3 +1,5 @@
+/** 组装 Worker 根模块、生成处理链路及健康和指标端点。 */
+
 import { Module } from '@nestjs/common';
 import { HealthController } from './health.controller';
 import { DevelopmentLlmController } from './llm/development-llm.controller';

@@ -1,3 +1,5 @@
+/** 端到端验证 generation 事件原子发布及 Redis 状态更新。 */
+
 import { redisConnectionOptions, type WorkerEnv } from '@chat/config';
 import { EventPublisherService } from '../src/events/event-publisher.service';
 import { eventKeys } from '../src/events/event-keys';

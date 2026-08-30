@@ -1,3 +1,5 @@
+/** 提供 API 存活状态及 PostgreSQL 就绪状态探针。 */
+
 import type { HealthResponse } from '@chat/contracts';
 import { Controller, Get, HttpStatus } from '@nestjs/common';
 import { Public } from './auth/auth.decorators';

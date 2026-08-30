@@ -1,3 +1,5 @@
+/** 定义 LLM 共享包的 TypeScript 与测试文件 ESLint 检查规则。 */
+
 // @ts-check
 import eslint from '@eslint/js';
 import prettier from 'eslint-plugin-prettier/recommended';

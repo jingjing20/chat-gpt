@@ -1,3 +1,5 @@
+/** 端到端验证 Worker 健康检查与模块启动。 */
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';

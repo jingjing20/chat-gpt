@@ -1,3 +1,5 @@
+/** 提供仅开发环境使用的 OpenAI 兼容流式假模型端点。 */
+
 import { readWorkerEnv } from '@chat/config';
 import {
   OpenAiCompatibleAdapter,

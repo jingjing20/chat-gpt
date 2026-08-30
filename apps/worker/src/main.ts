@@ -1,3 +1,5 @@
+/** 启动 Worker 进程，初始化遥测、日志、HTTP 端点和优雅退出。 */
+
 import { Logger } from '@nestjs/common';
 import {
   initializeOpenTelemetry,

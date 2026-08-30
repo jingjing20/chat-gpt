@@ -1,3 +1,5 @@
+/** 为每个 API 请求建立追踪上下文并记录脱敏访问日志与指标。 */
+
 import {
   metrics,
   parseTraceparent,

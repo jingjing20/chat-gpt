@@ -1,3 +1,5 @@
+/** 验证指标端点仅允许回环或基础设施网段地址访问。 */
+
 import { isInfrastructureAddress } from './metrics-network.guard';
 
 describe('metrics 基础设施网络限制', () => {

@@ -1,3 +1,5 @@
+/** 限制 Prometheus 指标端点只能由本机或内部基础设施网络访问。 */
+
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import type { Request } from 'express';

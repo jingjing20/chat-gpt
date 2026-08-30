@@ -1,3 +1,5 @@
+/** 启动 API 进程，初始化遥测、日志、应用配置及优雅退出。 */
+
 import { readApiEnv } from '@chat/config';
 import {
   initializeOpenTelemetry,

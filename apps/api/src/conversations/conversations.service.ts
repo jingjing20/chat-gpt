@@ -1,3 +1,5 @@
+/** 实现用户作用域内的对话 CRUD、消息分页、归档删除和阅读状态业务。 */
+
 import type {
   ConversationListResponse,
   ConversationResponse,
@@ -118,6 +120,7 @@ export class ConversationsService {
     return this.get(userId, conversationId);
   }
 
+  /** 在事务内永久删除对话关联数据，且只允许删除当前用户已归档的对话。 */
   async delete(
     userId: string,
     conversationId: string,
@@ -206,6 +209,7 @@ export class ConversationsService {
     return this.get(userId, conversationId);
   }
 
+  /** 原子创建用户消息和占位助手消息，为后续异步 generation 建立稳定引用。 */
   async createMessages(
     userId: string,
     conversationId: string,
@@ -250,6 +254,7 @@ export class ConversationsService {
     };
   }
 
+  /** 使用“创建时间 + ID”稳定游标倒序分页，避免同时间戳消息跳项。 */
   async listMessages(
     userId: string,
     conversationId: string,
@@ -289,6 +294,7 @@ export class ConversationsService {
     };
   }
 
+  /** 强制以 userId 和 conversationId 联合查询，防止跨用户资源枚举。 */
   private async requireScoped(
     userId: string,
     conversationId: string,

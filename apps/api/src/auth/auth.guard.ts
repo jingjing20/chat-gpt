@@ -1,3 +1,5 @@
+/** 校验访问令牌，并把认证后的用户标识写入当前 HTTP 请求。 */
+
 import {
   CanActivate,
   ExecutionContext,

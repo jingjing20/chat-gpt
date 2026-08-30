@@ -1,3 +1,5 @@
+/** 轮询数据库 Outbox，以幂等方式把待生成任务投递到 BullMQ。 */
+
 import type { ApiEnv } from '@chat/config';
 import { generationJobSchema, type GenerationJob } from '@chat/contracts';
 import { Prisma } from '@chat/database';
@@ -54,6 +56,7 @@ export class OutboxDispatcherService
   /**
    * 锁定一批未发布 Outbox 并投递 BullMQ；SKIP LOCKED 允许多个实例并行分片处理。
    */
+  /** 锁定一批待投递记录；队列 jobId 去重后才标记 Outbox 已发送。 */
   async dispatchOnce(): Promise<number> {
     if (this.dispatching) return 0;
     this.dispatching = true;

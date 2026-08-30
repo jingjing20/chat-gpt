@@ -1,3 +1,5 @@
+/** 按客户端 IP 对认证端点执行固定窗口请求限流。 */
+
 import {
   CanActivate,
   ExecutionContext,

@@ -1,3 +1,5 @@
+/** 统一导出 Prisma 客户端、数据库枚举和领域模型类型。 */
+
 export {
   AuditAction,
   AuditOutcome,

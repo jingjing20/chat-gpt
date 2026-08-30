@@ -1,3 +1,5 @@
+/** 验证 Worker 存活与就绪探针响应。 */
+
 import { HealthController } from './health.controller';
 
 describe('HealthController', () => {

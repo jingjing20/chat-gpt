@@ -1,3 +1,5 @@
+/** 提供注册、登录、令牌刷新、退出、CSRF 初始化和当前用户查询接口。 */
+
 import {
   loginRequestSchema,
   registerRequestSchema,

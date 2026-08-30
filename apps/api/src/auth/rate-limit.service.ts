@@ -1,3 +1,5 @@
+/** 在进程内维护认证请求的固定窗口限流计数。 */
+
 import type { ApiEnv } from '@chat/config';
 import { Inject, Injectable } from '@nestjs/common';
 import { API_ENV } from '../config/app-config';

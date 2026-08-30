@@ -1,3 +1,5 @@
+/** 验证访问令牌、随机令牌、摘要和常量时间比较等安全能力。 */
+
 import type { ApiEnv } from '@chat/config';
 import { JwtService } from '@nestjs/jwt';
 import { SecurityService } from './security.service';

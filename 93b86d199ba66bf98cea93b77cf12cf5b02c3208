@@ -1,0 +1,24 @@
+docs/backend-database-and-frontend-data-structures.md
+  57ad12e10d772f97 1-498
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "bzl_git_version": "0.1.32",
+  "base_commit_sha": "93b86d199ba66bf98cea93b77cf12cf5b02c3208",
+  "prompts": {
+    "57ad12e10d772f97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04b74-1954-7e02-988e-020da20a7cab",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 498,
+      "total_deletions": 0,
+      "accepted_lines": 498,
+      "overriden_lines": 0
+    }
+  }
+}

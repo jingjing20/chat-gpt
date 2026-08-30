@@ -1,0 +1,206 @@
+apps/worker/src/generation/generation.module.ts
+  32f028406c5f0839 1-2
+apps/api/src/events/events.controller.ts
+  32f028406c5f0839 1-2
+apps/api/src/outbox/outbox.module.ts
+  32f028406c5f0839 1-2
+apps/worker/src/generation/generation.processor.ts
+  32f028406c5f0839 1-2,56,134-137,523,573,630,673,729,782,897,924
+apps/worker/src/generation/provider.module.ts
+  32f028406c5f0839 1-2
+packages/llm/eslint.config.mjs
+  32f028406c5f0839 1-2
+apps/api/src/conversations/conversations.controller.ts
+  32f028406c5f0839 1-2
+packages/llm/src/openai-compatible-adapter.spec.ts
+  32f028406c5f0839 1-2
+packages/llm/src/types.ts
+  32f028406c5f0839 1-2
+packages/test-utils/src/index.ts
+  32f028406c5f0839 1-2
+apps/api/src/auth/auth.guard.ts
+  32f028406c5f0839 1-2
+packages/llm/src/provider-error.ts
+  32f028406c5f0839 1-2
+apps/api/src/http/request-id.middleware.ts
+  32f028406c5f0839 1-2
+apps/api/src/observability/observability.middleware.ts
+  32f028406c5f0839 1-2
+apps/api/src/protected-resource.controller.ts
+  32f028406c5f0839 1-2
+apps/api/src/http/zod-body.pipe.ts
+  32f028406c5f0839 1-2
+apps/worker/src/generation/context-window.spec.ts
+  32f028406c5f0839 1-2
+apps/worker/test/generation.e2e-spec.ts
+  32f028406c5f0839 1-2
+apps/api/eslint.config.mjs
+  32f028406c5f0839 1-2
+apps/api/src/health.controller.spec.ts
+  32f028406c5f0839 1-2
+packages/observability/src/index.spec.ts
+  32f028406c5f0839 1-2
+apps/worker/src/generation/zombie-generation-monitor.service.ts
+  32f028406c5f0839 1-2,48
+packages/test-utils/src/fake-provider.ts
+  32f028406c5f0839 1-2,27
+apps/api/src/http/api-exception.filter.ts
+  32f028406c5f0839 1-2,24
+apps/api/test/events.e2e-spec.ts
+  32f028406c5f0839 1-2
+apps/api/src/events/event-keys.ts
+  32f028406c5f0839 1-2
+apps/worker/src/database/prisma.service.ts
+  32f028406c5f0839 1-2
+apps/worker/src/health.controller.spec.ts
+  32f028406c5f0839 1-2
+packages/llm/src/sse-parser.ts
+  32f028406c5f0839 1-3
+apps/worker/src/events/event-publisher.service.ts
+  32f028406c5f0839 1-2,69
+apps/worker/src/generation/generation-worker.service.ts
+  32f028406c5f0839 1-2
+apps/api/src/observability/metrics-network.guard.spec.ts
+  32f028406c5f0839 1-2
+apps/api/src/generations/generations.controller.ts
+  32f028406c5f0839 1-2
+apps/worker/src/database/database.module.ts
+  32f028406c5f0839 1-2
+apps/api/src/configure-app.ts
+  32f028406c5f0839 1-2
+apps/api/src/generations/generations.module.ts
+  32f028406c5f0839 1-2
+apps/api/test/generations.e2e-spec.ts
+  32f028406c5f0839 1-2
+apps/worker/src/generation/generation-reliability.service.ts
+  32f028406c5f0839 1-2,31,93,118
+apps/worker/src/health.controller.ts
+  32f028406c5f0839 1-2
+apps/worker/src/llm/development-llm.controller.ts
+  32f028406c5f0839 1-2
+apps/worker/test/app.e2e-spec.ts
+  32f028406c5f0839 1-2
+packages/contracts/src/index.ts
+  32f028406c5f0839 1-2
+apps/api/src/auth/security.service.spec.ts
+  32f028406c5f0839 1-2
+apps/api/src/main.ts
+  32f028406c5f0839 1-2
+apps/api/src/database/prisma.service.ts
+  32f028406c5f0839 1-2
+apps/api/src/config/app-config.module.ts
+  32f028406c5f0839 1-2
+apps/api/src/events/events.service.spec.ts
+  32f028406c5f0839 1-2
+apps/api/src/auth/csrf.guard.ts
+  32f028406c5f0839 1-2
+apps/worker/src/generation/context-window.ts
+  32f028406c5f0839 1-2,27,62,131
+packages/llm/src/openai-compatible-adapter.ts
+  32f028406c5f0839 1-2,35,101,155
+apps/api/src/auth/auth.module.ts
+  32f028406c5f0839 1-2
+apps/api/src/conversations/conversations.module.ts
+  32f028406c5f0839 1-2
+apps/api/src/observability/metrics-network.guard.ts
+  32f028406c5f0839 1-2
+apps/api/src/auth/auth.decorators.ts
+  32f028406c5f0839 1-2
+apps/api/src/outbox/outbox.constants.ts
+  32f028406c5f0839 1-2
+apps/api/src/outbox/outbox-dispatcher.service.ts
+  32f028406c5f0839 1-2,59
+apps/api/src/config/app-config.ts
+  32f028406c5f0839 1-2
+apps/api/test/app.e2e-spec.ts
+  32f028406c5f0839 1-2
+apps/worker/src/generation/generation.constants.ts
+  32f028406c5f0839 1-2
+apps/worker/test/events.e2e-spec.ts
+  32f028406c5f0839 1-2
+packages/database/src/index.ts
+  32f028406c5f0839 1-2
+apps/worker/src/app.module.ts
+  32f028406c5f0839 1-2
+packages/config/src/index.ts
+  32f028406c5f0839 1-2,168,173,182
+apps/worker/eslint.config.mjs
+  32f028406c5f0839 1-2
+apps/worker/src/events/events.module.ts
+  32f028406c5f0839 1-2
+apps/worker/src/main.ts
+  32f028406c5f0839 1-2
+apps/api/src/database/database.module.ts
+  32f028406c5f0839 1-2
+apps/api/src/auth/rate-limit.service.ts
+  32f028406c5f0839 1-2
+apps/worker/src/config/worker-config.module.ts
+  32f028406c5f0839 1-2
+apps/worker/src/config/worker-config.ts
+  32f028406c5f0839 1-2
+apps/api/src/auth/security.service.ts
+  32f028406c5f0839 1-2
+apps/api/src/auth/auth.constants.ts
+  32f028406c5f0839 1-2
+apps/api/src/auth/rate-limit.service.spec.ts
+  32f028406c5f0839 1-2
+apps/api/src/http/api-exception.ts
+  32f028406c5f0839 1-2
+packages/llm/src/index.ts
+  32f028406c5f0839 1-2
+apps/worker/src/generation/generation.processor.spec.ts
+  32f028406c5f0839 1-2
+apps/api/src/events/events.service.ts
+  32f028406c5f0839 1-2,49,149,197,280
+packages/observability/src/index.ts
+  32f028406c5f0839 1-2,30,61,124,231,293
+apps/worker/src/observability/metrics.controller.ts
+  32f028406c5f0839 1-2
+packages/test-utils/src/fake-provider.spec.ts
+  32f028406c5f0839 1-2
+apps/api/src/auth/rate-limit.guard.ts
+  32f028406c5f0839 1-2
+apps/api/src/app.module.ts
+  32f028406c5f0839 1-2
+apps/api/src/types/express.d.ts
+  32f028406c5f0839 1-2
+apps/api/test/conversations.e2e-spec.ts
+  32f028406c5f0839 1-2
+apps/api/src/auth/auth.controller.ts
+  32f028406c5f0839 1-2
+apps/api/src/auth/auth.service.ts
+  32f028406c5f0839 1-2,42,88,138,201,282
+apps/api/src/conversations/conversations.service.ts
+  32f028406c5f0839 1-2,123,212,257,297
+apps/api/src/health.controller.ts
+  32f028406c5f0839 1-2
+apps/api/src/events/events.module.ts
+  32f028406c5f0839 1-2
+apps/api/src/generations/generations.service.ts
+  32f028406c5f0839 1-2,44,154,208,318,340
+apps/api/src/observability/metrics.controller.ts
+  32f028406c5f0839 1-2
+apps/worker/src/events/event-keys.ts
+  32f028406c5f0839 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "bzl_git_version": "0.1.32",
+  "base_commit_sha": "fba50e916d85d74b0ab09a0076d2df54093ad49f",
+  "prompts": {
+    "32f028406c5f0839": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a05189-bce4-7871-9ea5-5d1c875852c5",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 238,
+      "total_deletions": 0,
+      "accepted_lines": 238,
+      "overriden_lines": 0
+    }
+  }
+}

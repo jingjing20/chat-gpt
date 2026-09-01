@@ -23,7 +23,7 @@ groups:
         labels: { severity: page }
         annotations: { summary: '最老未发布 Outbox 事件已超过 60 秒' }
       - alert: GenerationQueueWaitHigh
-        expr: max_over_time(chat_generation_queue_wait_seconds_last[10m]) > 5
+        expr: histogram_quantile(0.95, sum(rate(chat_generation_queue_wait_seconds_bucket[10m])) by (le)) > 5
         for: 10m
         labels: { severity: ticket }
         annotations: { summary: 'Generation 最近队列等待持续超过 5 秒' }
@@ -52,3 +52,18 @@ groups:
         labels: { severity: page }
         annotations:
           { summary: 'API 或 Worker 的 Redis 客户端持续出现连接错误' }
+      - alert: OutboxDeadLetterPresent
+        expr: chat_outbox_dead_letter_count > 0
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: 'Outbox 出现死信，需要人工排查和恢复' }
+      - alert: OutboxDeliveryFailures
+        expr: increase(chat_outbox_delivery_failures_total[5m]) > 0
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: 'Outbox Relay 持续投递失败' }
+      - alert: WorkerLostGeneration
+        expr: increase(chat_generation_worker_lost_total[10m]) > 0
+        labels: { severity: ticket }
+        annotations:
+          { summary: '出现 WORKER_LOST 终态，请检查 Worker 生命周期和队列' }

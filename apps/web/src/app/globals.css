@@ -1336,7 +1336,7 @@ textarea:focus-visible {
 }
 
 .markdown-content a:hover {
-  text-decoration-color: currentColor;
+  text-decoration-color: rgb(154, 245, 189);
 }
 
 .markdown-content a:focus-visible {

@@ -1,11 +1,15 @@
 'use client';
 
-import { createConversation, createGeneration } from '@/lib/chat-api';
+import {
+  createConversationWithGeneration,
+  createGenerationOperation,
+  type GenerationOperation,
+} from '@/lib/chat-api';
 import { useGenerationStore } from '@/lib/generation-store';
 import { queryKeys } from '@/lib/query-keys';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { ArrowUp } from 'lucide-react';
 
 function createTitle(content: string) {
@@ -17,13 +21,22 @@ export function NewConversationStart() {
   const [content, setContent] = useState('');
   const queryClient = useQueryClient();
   const router = useRouter();
+  const pendingOperationRef = useRef<{
+    message: string;
+    operation: GenerationOperation;
+  } | null>(null);
   const startMutation = useMutation({
-    mutationFn: async (message: string) => {
-      const conversation = await createConversation(createTitle(message));
-      const result = await createGeneration(conversation.id, message);
-      return { conversation, result };
-    },
-    onSuccess: ({ conversation, result }) => {
+    mutationFn: async (input: {
+      message: string;
+      operation: GenerationOperation;
+    }) =>
+      createConversationWithGeneration(
+        createTitle(input.message),
+        input.message,
+        input.operation,
+      ),
+    onSuccess: (result) => {
+      pendingOperationRef.current = null;
       useGenerationStore.getState().register({
         generationId: result.generation.id,
         conversationId: result.generation.conversationId,
@@ -37,14 +50,21 @@ export function NewConversationStart() {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.all,
       });
-      router.push(`/chat/${conversation.id}`);
+      router.push(`/chat/${result.conversation.id}`);
     },
   });
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const message = content.trim();
-    if (message) startMutation.mutate(message);
+    if (!message) return;
+    const pending = pendingOperationRef.current;
+    const operation =
+      pending?.message === message
+        ? pending.operation
+        : createGenerationOperation();
+    pendingOperationRef.current = { message, operation };
+    startMutation.mutate({ message, operation });
   }
 
   return (

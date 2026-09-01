@@ -38,8 +38,14 @@ export class EventsController {
    * 返回当前用户的活动 generation 快照和后续开流所需的基线游标。
    */
   @Get('sync')
-  sync(@Req() request: Request) {
-    return this.events.sync(request.auth!.userId);
+  sync(
+    @Req() request: Request,
+    @Query('known_generation_ids') knownGenerationIds?: string,
+  ) {
+    return this.events.sync(
+      request.auth!.userId,
+      this.knownGenerationIds(knownGenerationIds),
+    );
   }
 
   /**
@@ -64,5 +70,21 @@ export class EventsController {
       throw new ApiException('VALIDATION_ERROR', '事件游标不合法', 422);
     }
     return parsed.data;
+  }
+
+  private knownGenerationIds(value: string | undefined): string[] {
+    if (!value) return [];
+    const parsed = z
+      .array(z.string().uuid())
+      .max(100)
+      .safeParse(value.split(',').filter(Boolean));
+    if (!parsed.success) {
+      throw new ApiException(
+        'VALIDATION_ERROR',
+        'Generation 对账参数不合法',
+        422,
+      );
+    }
+    return [...new Set(parsed.data)];
   }
 }

@@ -207,17 +207,22 @@ model UsageRecord {
 }
 
 model OutboxEvent {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  aggregateType String    @map("aggregate_type") @db.VarChar(50)
-  aggregateId   String    @map("aggregate_id") @db.Uuid
-  type          String    @db.VarChar(100)
-  payload       Json
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  publishedAt   DateTime? @map("published_at") @db.Timestamptz(3)
-  attempts      Int       @default(0)
-  lastError     String?   @map("last_error") @db.VarChar(500)
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  aggregateType  String    @map("aggregate_type") @db.VarChar(50)
+  aggregateId    String    @map("aggregate_id") @db.Uuid
+  type           String    @db.VarChar(100)
+  payload        Json
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz(3)
+  attempts       Int       @default(0)
+  lastError      String?   @map("last_error") @db.VarChar(500)
+  nextAttemptAt  DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lockedAt       DateTime? @map("locked_at") @db.Timestamptz(3)
+  lockToken      String?   @map("lock_token") @db.Uuid
+  deadLetteredAt DateTime? @map("dead_lettered_at") @db.Timestamptz(3)
 
   @@index([publishedAt, createdAt])
+  @@index([publishedAt, deadLetteredAt, nextAttemptAt, createdAt])
   @@map("outbox_events")
 }
 

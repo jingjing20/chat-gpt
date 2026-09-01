@@ -33,6 +33,8 @@ import { ConversationsService } from './conversations.service';
 const idSchema = z.string().uuid();
 const listQuerySchema = z.object({
   archived: z.enum(['true', 'false']).optional().default('false'),
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 const messageQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
@@ -58,6 +60,8 @@ export class ConversationsController {
     return this.conversations.list(
       this.userId(request),
       parsed.archived === 'true',
+      parsed.limit,
+      parsed.cursor,
     );
   }
 

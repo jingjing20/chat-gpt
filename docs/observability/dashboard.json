@@ -14,16 +14,16 @@
       "query": "sum(rate(chat_generation_jobs_total[5m])) by (status)"
     },
     {
-      "title": "最近 Generation 耗时",
-      "query": "chat_generation_duration_seconds_last"
+      "title": "Generation 耗时 p95",
+      "query": "histogram_quantile(0.95, sum(rate(chat_generation_duration_seconds_bucket[5m])) by (le))"
     },
     {
       "title": "Outbox 积压与最老年龄",
       "query": "chat_outbox_unpublished_count or chat_outbox_oldest_unpublished_seconds"
     },
     {
-      "title": "Generation 队列等待",
-      "query": "chat_generation_queue_wait_seconds_last"
+      "title": "Generation 队列等待 p95",
+      "query": "histogram_quantile(0.95, sum(rate(chat_generation_queue_wait_seconds_bucket[5m])) by (le))"
     },
     {
       "title": "供应商错误",
@@ -40,6 +40,14 @@
     {
       "title": "Redis 客户端错误",
       "query": "sum(rate(chat_redis_client_errors_total[5m])) by (service, component)"
+    },
+    {
+      "title": "Outbox 投递与死信",
+      "query": "sum(rate(chat_outbox_delivery_failures_total[5m])) by (type, code) or chat_outbox_dead_letter_count"
+    },
+    {
+      "title": "终态对账修复",
+      "query": "increase(chat_generation_sync_reconciliations_total[15m])"
     },
     {
       "title": "进程 RSS",

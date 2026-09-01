@@ -5,6 +5,7 @@ import {
   conversationResponseSchema,
   createGenerationResponseSchema,
   csrfResponseSchema,
+  generationEventHistorySchema,
   generationResponseSchema,
 } from '@chat/contracts';
 import type { INestApplication } from '@nestjs/common';
@@ -94,6 +95,45 @@ describe('API 阶段 4 Generation（端到端）', () => {
     expect(await prisma.outboxEvent.count()).toBe(1);
   });
 
+  it('新对话和首个 generation 原子创建，网络重试不会留下空对话', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const csrfToken = await register(agent, 'atomic-first-turn@example.com');
+    const idempotencyKey = randomUUID();
+    const payload = {
+      title: '首问原子创建',
+      content: '不要创建孤立的空对话',
+      clientMessageId: randomUUID(),
+    };
+    const create = () =>
+      agent
+        .post('/api/v1/conversations/with-generation')
+        .set('x-csrf-token', csrfToken)
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload);
+
+    const first = createGenerationResponseSchema.parse(
+      (await create().expect(202)).body,
+    );
+    const repeated = createGenerationResponseSchema.parse(
+      (await create().expect(202)).body,
+    );
+
+    expect(repeated.generation.id).toBe(first.generation.id);
+    expect(repeated.conversation.id).toBe(first.conversation.id);
+    expect(await prisma.conversation.count()).toBe(1);
+    expect(await prisma.message.count()).toBe(2);
+    expect(await prisma.generation.count()).toBe(1);
+    expect(await prisma.outboxEvent.count()).toBe(1);
+
+    await agent
+      .post('/api/v1/conversations/with-generation')
+      .set('x-csrf-token', csrfToken)
+      .set('Idempotency-Key', idempotencyKey)
+      .send({ ...payload, content: '同一幂等键不能换请求' })
+      .expect(409);
+    expect(await prisma.conversation.count()).toBe(1);
+  });
+
   it('相同幂等键和请求返回原资源，不同请求返回冲突', async () => {
     const agent = request.agent(app.getHttpServer());
     const csrfToken = await register(agent, 'idempotency@example.com');
@@ -163,6 +203,88 @@ describe('API 阶段 4 Generation（端到端）', () => {
       data: { generationId },
     });
     expect(metrics.render()).toContain('chat_outbox_unpublished_count');
+  });
+
+  it('终态 Outbox 可重投且只生成一个稳定终态事件', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const csrfToken = await register(agent, 'terminal-outbox@example.com');
+    const conversationId = await createConversation(agent, csrfToken);
+    const created = createGenerationResponseSchema.parse(
+      (
+        await agent
+          .post(`/api/v1/conversations/${conversationId}/generations`)
+          .set('x-csrf-token', csrfToken)
+          .set('Idempotency-Key', randomUUID())
+          .send({ content: '可靠终态', clientMessageId: randomUUID() })
+          .expect(202)
+      ).body,
+    );
+    const generation = await prisma.generation.findUniqueOrThrow({
+      where: { id: created.generation.id },
+    });
+    await prisma.$transaction([
+      prisma.message.update({
+        where: { id: generation.responseMessageId },
+        data: {
+          status: 'COMPLETED',
+          content: '最终内容',
+          completedAt: new Date(),
+        },
+      }),
+      prisma.generation.update({
+        where: { id: generation.id },
+        data: { status: 'COMPLETED', completedAt: new Date() },
+      }),
+      prisma.outboxEvent.create({
+        data: {
+          aggregateType: 'generation',
+          aggregateId: generation.id,
+          type: 'generation.completed',
+          payload: {
+            version: 1,
+            userId: generation.userId,
+            conversationId: generation.conversationId,
+            generationId: generation.id,
+            messageId: generation.responseMessageId,
+            type: 'generation.completed',
+            payload: { finishReason: 'stop' },
+            state: {
+              content: '最终内容',
+              reasoningContent: null,
+              status: 'COMPLETED',
+            },
+          },
+        },
+      }),
+    ]);
+
+    await dispatcher.dispatchOnce();
+    const terminal = await prisma.outboxEvent.findFirstOrThrow({
+      where: { aggregateId: generation.id, type: 'generation.completed' },
+    });
+    await prisma.outboxEvent.update({
+      where: { id: terminal.id },
+      data: { publishedAt: null },
+    });
+    await dispatcher.dispatchOnce();
+
+    const history = generationEventHistorySchema.parse(
+      (
+        await agent
+          .get(`/api/v1/generations/${generation.id}/events`)
+          .query({ after_sequence: 0 })
+          .expect(200)
+      ).body,
+    );
+    expect(history.mode).toBe('events');
+    if (history.mode === 'events') {
+      expect(history.events).toHaveLength(1);
+      expect(history.events[0]).toMatchObject({
+        eventId: terminal.id,
+        type: 'generation.completed',
+        payload: { finishReason: 'stop' },
+      });
+    }
   });
 
   it('查询和取消按用户隔离，重复取消保持幂等', async () => {

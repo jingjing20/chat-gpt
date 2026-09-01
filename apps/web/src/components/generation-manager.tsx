@@ -1,7 +1,7 @@
 'use client';
 
 import { getGenerationEvents, syncGenerations } from '@/lib/chat-api';
-import { useGenerationStore } from '@/lib/generation-store';
+import { isGenerationActive, useGenerationStore } from '@/lib/generation-store';
 import { queryKeys } from '@/lib/query-keys';
 import { SseParser } from '@/lib/sse-parser';
 import { userEventSchema, type UserEvent } from '@chat/contracts';
@@ -63,7 +63,13 @@ export function GenerationManager({ userId }: { userId: string }) {
       const cursorKey = `chat.eventCursor.${userId}`;
       try {
         if (!initialized) {
-          const sync = await syncGenerations();
+          const knownActiveIds = Object.values(
+            useGenerationStore.getState().generations,
+          )
+            .filter((generation) => isGenerationActive(generation.status))
+            .map((generation) => generation.generationId)
+            .slice(0, 100);
+          const sync = await syncGenerations(knownActiveIds);
           for (const generation of sync.activeGenerations) {
             useGenerationStore.getState().register({
               generationId: generation.generationId,
@@ -75,6 +81,29 @@ export function GenerationManager({ userId }: { userId: string }) {
               lastAppliedSequence: generation.sequence,
               syncState: 'synced',
             });
+          }
+          for (const generation of sync.reconciledGenerations) {
+            useGenerationStore
+              .getState()
+              .replaceSnapshot(generation.generationId, {
+                status: generation.status,
+                content: generation.content,
+                reasoningContent: generation.reasoningContent ?? '',
+                lastAppliedSequence: generation.sequence,
+                error: generation.error ?? undefined,
+              });
+            if (!isGenerationActive(generation.status)) {
+              await Promise.all([
+                queryClient.invalidateQueries({
+                  queryKey: queryKeys.conversations.messages(
+                    generation.conversationId,
+                  ),
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: queryKeys.conversations.all,
+                }),
+              ]);
+            }
           }
           sessionStorage.setItem(cursorKey, sync.eventCursor);
           initialized = true;

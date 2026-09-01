@@ -7,7 +7,12 @@ import {
   logout,
 } from '@/lib/chat-api';
 import { queryKeys } from '@/lib/query-keys';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { Menu } from '@base-ui/react/menu';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -57,11 +62,15 @@ export function ChatShell({ children }: { children: ReactNode }) {
     queryFn: getCurrentUser,
     retry: false,
   });
-  const conversationsQuery = useQuery({
+  const conversationsQuery = useInfiniteQuery({
     queryKey: queryKeys.conversations.list(false),
-    queryFn: () => listConversations(false),
+    queryFn: ({ pageParam }) => listConversations(false, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: userQuery.isSuccess,
   });
+  const conversations =
+    conversationsQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const logoutMutation = useMutation({
     mutationFn: logout,
     onSuccess: () => {
@@ -115,6 +124,7 @@ export function ChatShell({ children }: { children: ReactNode }) {
           </button>
         </div>
         <button
+          aria-label="新建对话"
           className="new-conversation-button"
           onClick={() => router.push('/chat')}
           type="button"
@@ -123,22 +133,31 @@ export function ChatShell({ children }: { children: ReactNode }) {
           <span>新建对话</span>
         </button>
         <nav className="conversation-nav" aria-label="对话列表">
-          {groupConversations(conversationsQuery.data?.items ?? []).map(
-            ([label, conversations]) => (
-              <section className="conversation-group" key={label}>
-                <p className="nav-label">{label}</p>
-                {conversations.map((conversation) => (
-                  <ConversationNavLink
-                    conversation={conversation}
-                    isActive={params.conversationId === conversation.id}
-                    key={conversation.id}
-                  />
-                ))}
-              </section>
-            ),
-          )}
-          {conversationsQuery.isSuccess &&
-          conversationsQuery.data.items.length === 0 ? (
+          {groupConversations(conversations).map(([label, conversations]) => (
+            <section className="conversation-group" key={label}>
+              <p className="nav-label">{label}</p>
+              {conversations.map((conversation) => (
+                <ConversationNavLink
+                  conversation={conversation}
+                  isActive={params.conversationId === conversation.id}
+                  key={conversation.id}
+                />
+              ))}
+            </section>
+          ))}
+          {conversationsQuery.hasNextPage ? (
+            <button
+              className="load-older"
+              disabled={conversationsQuery.isFetchingNextPage}
+              onClick={() => conversationsQuery.fetchNextPage()}
+              type="button"
+            >
+              {conversationsQuery.isFetchingNextPage
+                ? '正在加载…'
+                : '加载更多对话'}
+            </button>
+          ) : null}
+          {conversationsQuery.isSuccess && conversations.length === 0 ? (
             <p className="empty-nav">还没有对话，从首页输入一个问题开始。</p>
           ) : null}
         </nav>

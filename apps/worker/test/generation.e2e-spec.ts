@@ -32,7 +32,7 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
   const prisma = new PrismaService();
   const environment = readWorkerEnv(process.env);
   const queue = new Queue<GenerationJob>(GENERATION_QUEUE_NAME, {
-    connection: redisConnectionOptions(environment.REDIS_URL),
+    connection: redisConnectionOptions(environment.QUEUE_REDIS_URL),
     prefix: environment.GENERATION_QUEUE_PREFIX,
   });
 
@@ -119,7 +119,7 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
     expect(generation.attempts[0]?.receivedFirstDelta).toBe(true);
     expect(provider.requests).toHaveLength(1);
     expect(metrics.render()).toContain(
-      'chat_generation_provider_errors_total{code="CONNECTION_LOST",provider="fake"}',
+      'chat_generation_provider_errors_total{code="CONNECTION_LOST",provider="deepseek"}',
     );
   });
 
@@ -143,8 +143,30 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
     expect(generation.attempts).toHaveLength(1);
     expect(provider.requests).toHaveLength(1);
     expect(metrics.render()).toContain(
-      'chat_generation_provider_errors_total{code="AUTHENTICATION_FAILED",provider="fake"}',
+      'chat_generation_provider_errors_total{code="AUTHENTICATION_FAILED",provider="deepseek"}',
     );
+  });
+
+  it('任务模型与 Worker 配置不一致时不调用供应商并安全失败', async () => {
+    const generationId = await seedGeneration(prisma, {
+      provider: 'legacy-provider',
+      model: 'legacy-model',
+    });
+    const provider = new FakeLlmProvider([
+      { event: { type: 'content_delta', delta: '不应被调用' } },
+    ]);
+
+    await new GenerationProcessor(prisma, provider, environment).process(
+      generationId,
+    );
+
+    await expect(
+      prisma.generation.findUniqueOrThrow({ where: { id: generationId } }),
+    ).resolves.toMatchObject({
+      status: GenerationStatus.FAILED,
+      errorCode: 'CONFIGURATION_MISMATCH',
+    });
+    expect(provider.requests).toHaveLength(0);
   });
 
   it('流式生成期间按版本写入 PostgreSQL checkpoint', async () => {
@@ -336,6 +358,24 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
         status: 'FAILED',
         errorCode: 'WORKER_LOST',
       });
+      await expect(
+        prisma.conversationUserState.findUniqueOrThrow({
+          where: {
+            conversationId_userId: {
+              conversationId: recovered.conversationId,
+              userId: recovered.userId,
+            },
+          },
+        }),
+      ).resolves.toMatchObject({ hasUnread: true });
+      await expect(
+        prisma.outboxEvent.findFirstOrThrow({
+          where: { aggregateId: generationId },
+        }),
+      ).resolves.toMatchObject({
+        type: 'generation.failed',
+        publishedAt: null,
+      });
     } finally {
       await monitor.onApplicationShutdown();
     }
@@ -347,7 +387,13 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
   });
 });
 
-async function seedGeneration(prisma: PrismaClient): Promise<string> {
+async function seedGeneration(
+  prisma: PrismaClient,
+  configuration: { provider: string; model: string } = {
+    provider: 'deepseek',
+    model: 'deepseek-v4-flash',
+  },
+): Promise<string> {
   const user = await prisma.user.create({
     data: {
       email: `${randomUUID()}@example.com`,
@@ -385,8 +431,8 @@ async function seedGeneration(prisma: PrismaClient): Promise<string> {
       conversationId: conversation.id,
       requestMessageId: requestMessage.id,
       responseMessageId: responseMessage.id,
-      provider: 'fake',
-      model: 'fake-model',
+      provider: configuration.provider,
+      model: configuration.model,
       idempotencyKey: randomUUID(),
       requestHash: 'a'.repeat(64),
     },

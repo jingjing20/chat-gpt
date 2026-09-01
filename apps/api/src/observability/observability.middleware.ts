@@ -44,11 +44,17 @@ export class ObservabilityMiddleware implements NestMiddleware {
           method: request.method,
           status: String(response.statusCode),
         });
+        const durationSeconds =
+          Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
         metrics.gauge(
           'chat_http_request_duration_seconds_last',
-          Number(process.hrtime.bigint() - startedAt) / 1_000_000_000,
+          durationSeconds,
           { service: 'api', method: request.method },
         );
+        metrics.observe('chat_http_request_duration_seconds', durationSeconds, {
+          service: 'api',
+          method: request.method,
+        });
       });
       next();
     });

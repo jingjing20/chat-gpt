@@ -7,7 +7,9 @@ const nodeEnvSchema = z.enum(['development', 'test', 'production']);
 const infrastructureSchema = z.object({
   NODE_ENV: nodeEnvSchema.default('development'),
   DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().url(),
+  REDIS_URL: z.string().url().optional(),
+  QUEUE_REDIS_URL: z.string().url().optional(),
+  CONTROL_REDIS_URL: z.string().url().optional(),
   OTEL_SDK_DISABLED: z
     .enum(['true', 'false'])
     .default('true')
@@ -15,7 +17,7 @@ const infrastructureSchema = z.object({
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: z.string().url().optional(),
 });
 
-export const apiEnvSchema = infrastructureSchema.extend({
+const apiEnvInputSchema = infrastructureSchema.extend({
   API_PORT: z.coerce.number().int().min(1).max(65_535).default(3001),
   ACCESS_TOKEN_SECRET: z.string().min(32),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).default(900),
@@ -33,12 +35,27 @@ export const apiEnvSchema = infrastructureSchema.extend({
   LLM_PROVIDER: z.string().trim().min(1).default('deepseek'),
   LLM_DEFAULT_MODEL: z.string().trim().min(1).default('deepseek-v4-flash'),
   OUTBOX_DISPATCH_INTERVAL_MS: z.coerce.number().int().min(50).default(500),
+  OUTBOX_RELAY_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
   OUTBOX_DISPATCH_BATCH_SIZE: z.coerce
     .number()
     .int()
     .min(1)
     .max(100)
     .default(20),
+  OUTBOX_LOCK_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(30_000),
+  OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(100).default(12),
+  DATA_RETENTION_CLEANUP_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(60_000)
+    .default(21_600_000),
+  OUTBOX_RETENTION_DAYS: z.coerce.number().int().min(1).default(7),
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().min(1).default(180),
+  SECURITY_AUDIT_RETENTION_DAYS: z.coerce.number().int().min(1).default(730),
+  USAGE_RETENTION_DAYS: z.coerce.number().int().min(1).default(730),
   GENERATION_QUEUE_COMPLETED_RETENTION_COUNT: z.coerce
     .number()
     .int()
@@ -59,7 +76,53 @@ export const apiEnvSchema = infrastructureSchema.extend({
   USER_GENERATION_CONCURRENCY_LIMIT: z.coerce.number().int().min(1).default(2),
 });
 
-export const workerEnvSchema = infrastructureSchema
+export const apiEnvSchema = apiEnvInputSchema
+  .superRefine((environment, context) => {
+    if (
+      environment.NODE_ENV !== 'production' &&
+      !environment.REDIS_URL &&
+      (!environment.QUEUE_REDIS_URL || !environment.CONTROL_REDIS_URL)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['REDIS_URL'],
+        message: '开发和测试环境必须配置 REDIS_URL，或同时配置两个 Redis URL',
+      });
+    }
+    if (environment.NODE_ENV !== 'production') return;
+    if (!environment.QUEUE_REDIS_URL) {
+      context.addIssue({
+        code: 'custom',
+        path: ['QUEUE_REDIS_URL'],
+        message: '生产环境必须显式配置 QUEUE_REDIS_URL',
+      });
+    }
+    if (!environment.CONTROL_REDIS_URL) {
+      context.addIssue({
+        code: 'custom',
+        path: ['CONTROL_REDIS_URL'],
+        message: '生产环境必须显式配置 CONTROL_REDIS_URL',
+      });
+    }
+    if (
+      environment.QUEUE_REDIS_URL &&
+      environment.QUEUE_REDIS_URL === environment.CONTROL_REDIS_URL
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['CONTROL_REDIS_URL'],
+        message: '生产环境的队列 Redis 与控制 Redis 必须使用不同实例',
+      });
+    }
+  })
+  .transform((environment) => ({
+    ...environment,
+    QUEUE_REDIS_URL: (environment.QUEUE_REDIS_URL ?? environment.REDIS_URL)!,
+    CONTROL_REDIS_URL: (environment.CONTROL_REDIS_URL ??
+      environment.REDIS_URL)!,
+  }));
+
+const workerEnvInputSchema = infrastructureSchema
   .extend({
     WORKER_HEALTH_PORT: z.coerce
       .number()
@@ -127,6 +190,12 @@ export const workerEnvSchema = infrastructureSchema
       .int()
       .min(256)
       .default(3072),
+    GENERATION_CONTEXT_CANDIDATE_MESSAGES: z.coerce
+      .number()
+      .int()
+      .min(20)
+      .max(5_000)
+      .default(500),
   })
   .superRefine((environment, context) => {
     if (environment.LLM_MAX_OUTPUT_TOKENS >= environment.LLM_CONTEXT_WINDOW) {
@@ -153,7 +222,53 @@ export const workerEnvSchema = infrastructureSchema
         message: '生产环境必须配置独立的 LLM_USER_HASH_SECRET',
       });
     }
+    if (environment.NODE_ENV === 'production') {
+      if (!environment.QUEUE_REDIS_URL) {
+        context.addIssue({
+          code: 'custom',
+          path: ['QUEUE_REDIS_URL'],
+          message: '生产环境必须显式配置 QUEUE_REDIS_URL',
+        });
+      }
+      if (!environment.CONTROL_REDIS_URL) {
+        context.addIssue({
+          code: 'custom',
+          path: ['CONTROL_REDIS_URL'],
+          message: '生产环境必须显式配置 CONTROL_REDIS_URL',
+        });
+      }
+      if (
+        environment.QUEUE_REDIS_URL &&
+        environment.QUEUE_REDIS_URL === environment.CONTROL_REDIS_URL
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['CONTROL_REDIS_URL'],
+          message: '生产环境的队列 Redis 与控制 Redis 必须使用不同实例',
+        });
+      }
+    }
+    if (
+      environment.NODE_ENV !== 'production' &&
+      !environment.REDIS_URL &&
+      (!environment.QUEUE_REDIS_URL || !environment.CONTROL_REDIS_URL)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['REDIS_URL'],
+        message: '开发和测试环境必须配置 REDIS_URL，或同时配置两个 Redis URL',
+      });
+    }
   });
+
+export const workerEnvSchema = workerEnvInputSchema.transform(
+  (environment) => ({
+    ...environment,
+    QUEUE_REDIS_URL: (environment.QUEUE_REDIS_URL ?? environment.REDIS_URL)!,
+    CONTROL_REDIS_URL: (environment.CONTROL_REDIS_URL ??
+      environment.REDIS_URL)!,
+  }),
+);
 
 export const webEnvSchema = z.object({
   NODE_ENV: nodeEnvSchema.default('development'),

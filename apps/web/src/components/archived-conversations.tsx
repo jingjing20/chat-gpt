@@ -2,7 +2,11 @@
 
 import { AlertDialog } from '@base-ui/react/alert-dialog';
 import type { ConversationResponse } from '@chat/contracts';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { ArchiveRestore, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -17,10 +21,14 @@ export function ArchivedConversations() {
   const [deleteTarget, setDeleteTarget] = useState<ConversationResponse | null>(
     null,
   );
-  const archivedQuery = useQuery({
+  const archivedQuery = useInfiniteQuery({
     queryKey: queryKeys.conversations.list(true),
-    queryFn: () => listConversations(true),
+    queryFn: ({ pageParam }) => listConversations(true, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
+  const archivedConversations =
+    archivedQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const restoreMutation = useMutation({
     mutationFn: restoreConversation,
     onSuccess: async () => {
@@ -54,7 +62,7 @@ export function ArchivedConversations() {
         {archivedQuery.isError ? (
           <p className="settings-state error">加载失败，请稍后重试。</p>
         ) : null}
-        {archivedQuery.data?.items.map((conversation) => (
+        {archivedConversations.map((conversation) => (
           <article className="archived-item" key={conversation.id}>
             <div>
               <h2>{conversation.title}</h2>
@@ -84,7 +92,17 @@ export function ArchivedConversations() {
             </div>
           </article>
         ))}
-        {archivedQuery.isSuccess && archivedQuery.data.items.length === 0 ? (
+        {archivedQuery.hasNextPage ? (
+          <button
+            className="secondary-button"
+            disabled={archivedQuery.isFetchingNextPage}
+            onClick={() => archivedQuery.fetchNextPage()}
+            type="button"
+          >
+            {archivedQuery.isFetchingNextPage ? '正在加载…' : '加载更多'}
+          </button>
+        ) : null}
+        {archivedQuery.isSuccess && archivedConversations.length === 0 ? (
           <div className="settings-empty">
             <ArchiveRestore aria-hidden="true" size={24} />
             <p>还没有已归档的对话。</p>

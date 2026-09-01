@@ -103,6 +103,7 @@ export const conversationResponseSchema = z.object({
 
 export const conversationListResponseSchema = z.object({
   items: z.array(conversationResponseSchema),
+  nextCursor: z.string().nullable(),
 });
 
 export const messageResponseSchema = z.object({
@@ -160,6 +161,11 @@ export const createGenerationRequestSchema = z.object({
   clientMessageId: z.string().uuid(),
 });
 
+export const createConversationGenerationRequestSchema =
+  createGenerationRequestSchema.extend({
+    title: conversationTitleSchema,
+  });
+
 export const generationResponseSchema = z.object({
   id: z.string().uuid(),
   conversationId: z.string().uuid(),
@@ -193,6 +199,9 @@ export const generationJobSchema = z.object({
 
 export type CreateGenerationRequest = z.infer<
   typeof createGenerationRequestSchema
+>;
+export type CreateConversationGenerationRequest = z.infer<
+  typeof createConversationGenerationRequestSchema
 >;
 export type GenerationResponse = z.infer<typeof generationResponseSchema>;
 export type CreateGenerationResponse = z.infer<
@@ -230,6 +239,32 @@ export const generationEventTypeSchema = z.enum([
   'generation.failed',
   'generation.cancelled',
 ]);
+
+export const terminalGenerationEventTypeSchema = z.enum([
+  'generation.completed',
+  'generation.failed',
+  'generation.cancelled',
+]);
+
+/** PostgreSQL Outbox 中的可靠终态事件；eventId 由 Outbox 主键提供。 */
+export const generationTerminalOutboxPayloadSchema = z.object({
+  version: z.literal(1),
+  userId: z.string().uuid(),
+  conversationId: z.string().uuid(),
+  generationId: z.string().uuid(),
+  messageId: z.string().uuid(),
+  type: terminalGenerationEventTypeSchema,
+  payload: z.record(z.string(), z.unknown()),
+  state: z.object({
+    content: z.string(),
+    reasoningContent: z.string().nullable(),
+    status: z.enum(['COMPLETED', 'FAILED', 'CANCELLED']),
+  }),
+});
+
+export type GenerationTerminalOutboxPayload = z.infer<
+  typeof generationTerminalOutboxPayloadSchema
+>;
 
 /**
  * 用户级事件信封：conversationId 用于视图投影，generationId 和 sequence 用于隔离与排序。
@@ -281,6 +316,18 @@ export const generationSyncResponseSchema = z.object({
       content: z.string(),
       reasoningContent: z.string().nullable(),
       sequence: z.number().int().nonnegative(),
+    }),
+  ),
+  reconciledGenerations: z.array(
+    z.object({
+      generationId: z.string().uuid(),
+      conversationId: z.string().uuid(),
+      messageId: z.string().uuid(),
+      status: generationStatusSchema,
+      content: z.string(),
+      reasoningContent: z.string().nullable(),
+      sequence: z.number().int().nonnegative(),
+      error: z.string().nullable(),
     }),
   ),
 });

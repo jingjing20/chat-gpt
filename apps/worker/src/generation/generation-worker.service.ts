@@ -41,10 +41,13 @@ export class GenerationWorkerService
       async (job) => {
         const payload = generationJobSchema.parse(job.data);
         const startedAt = process.hrtime.bigint();
+        const queueWaitSeconds =
+          Math.max(0, Date.now() - job.timestamp) / 1_000;
         metrics.gauge(
           'chat_generation_queue_wait_seconds_last',
-          Math.max(0, Date.now() - job.timestamp) / 1_000,
+          queueWaitSeconds,
         );
+        metrics.observe('chat_generation_queue_wait_seconds', queueWaitSeconds);
         await runWithTelemetrySpan(
           'generation.process',
           { 'generation.id': payload.generationId },
@@ -60,13 +63,13 @@ export class GenerationWorkerService
         metrics.increment('chat_generation_jobs_total', {
           status: 'completed',
         });
-        metrics.gauge(
-          'chat_generation_duration_seconds_last',
-          Number(process.hrtime.bigint() - startedAt) / 1_000_000_000,
-        );
+        const durationSeconds =
+          Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
+        metrics.gauge('chat_generation_duration_seconds_last', durationSeconds);
+        metrics.observe('chat_generation_duration_seconds', durationSeconds);
       },
       {
-        connection: redisConnectionOptions(this.environment.REDIS_URL),
+        connection: redisConnectionOptions(this.environment.QUEUE_REDIS_URL),
         prefix: this.environment.GENERATION_QUEUE_PREFIX,
         concurrency: this.environment.GENERATION_WORKER_CONCURRENCY,
       },

@@ -139,6 +139,12 @@ describe('API 阶段 1（端到端）', () => {
       .expect(({ body }: { body: Record<string, unknown> }) => {
         expect(body).toMatchObject({ code: 'UNAUTHENTICATED' });
       });
+
+    const revokedChain = await prisma.refreshSession.findMany({
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(revokedChain).toHaveLength(2);
+    expect(revokedChain.every((item) => item.revokedAt !== null)).toBe(true);
   });
 
   it('退出撤销刷新会话，且跨用户资源返回不存在', async () => {

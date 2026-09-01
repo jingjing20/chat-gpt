@@ -13,7 +13,7 @@
     "db:generate": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js generate",
     "db:migrate:deploy": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js migrate deploy",
     "db:migrate:dev": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js migrate dev",
-    "db:test:prepare": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js migrate deploy",
+    "db:test:prepare": "node --env-file-if-exists=../../.env scripts/prepare-test-database.mjs",
     "format": "prisma format",
     "typecheck": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js generate && tsc --noEmit -p tsconfig.json"
   },

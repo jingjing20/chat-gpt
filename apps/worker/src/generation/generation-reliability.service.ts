@@ -17,7 +17,7 @@ export class GenerationReliabilityService implements OnApplicationShutdown {
 
   constructor(@Inject(WORKER_ENV) private readonly environment: WorkerEnv) {
     this.redis = new Redis({
-      ...redisConnectionOptions(environment.REDIS_URL),
+      ...redisConnectionOptions(environment.CONTROL_REDIS_URL),
       maxRetriesPerRequest: 1,
     });
     this.redis.on('error', () => {

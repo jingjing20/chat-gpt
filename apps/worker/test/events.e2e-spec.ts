@@ -11,6 +11,8 @@ describe('事件原子发布', () => {
   const prefix = `chat:test:evt:${randomUUID()}`;
   const environment = {
     REDIS_URL: redisUrl,
+    QUEUE_REDIS_URL: redisUrl,
+    CONTROL_REDIS_URL: redisUrl,
     EVENT_KEY_PREFIX: prefix,
     EVENT_RETENTION_MS: 86_400_000,
   } as WorkerEnv;

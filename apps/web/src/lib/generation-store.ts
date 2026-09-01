@@ -14,6 +14,7 @@ export interface ActiveGenerationState {
   lastAppliedSequence: number;
   syncState: 'synced' | 'resyncing';
   error?: string;
+  terminalAt?: number;
 }
 
 export type ApplyResult = 'applied' | 'duplicate' | 'gap';
@@ -75,6 +76,9 @@ export function reduceGenerationEvent(
     next.status = 'FAILED';
     next.error = String(event.payload.safeMessage ?? '生成失败');
   }
+  if (!isGenerationActive(next.status)) {
+    next.terminalAt = Date.parse(event.occurredAt);
+  }
   next.syncState = 'synced';
   return { state: next, result: 'applied' };
 }
@@ -89,7 +93,11 @@ interface GenerationStore {
     generationId: string,
     snapshot: Pick<
       ActiveGenerationState,
-      'content' | 'reasoningContent' | 'lastAppliedSequence' | 'status'
+      | 'content'
+      | 'reasoningContent'
+      | 'lastAppliedSequence'
+      | 'status'
+      | 'error'
     >,
   ) => void;
   setDraft: (conversationId: string, content: string) => void;
@@ -140,10 +148,10 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
       return current && current.lastAppliedSequence >= state.lastAppliedSequence
         ? store
         : {
-            generations: {
+            generations: pruneGenerations({
               ...store.generations,
               [state.generationId]: state,
-            },
+            }),
           };
     }),
   apply: (event) => {
@@ -152,10 +160,10 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
       event,
     );
     set((store) => ({
-      generations: {
+      generations: pruneGenerations({
         ...store.generations,
         [event.generationId]: reduced.state,
-      },
+      }),
     }));
     return reduced.result;
   },
@@ -167,14 +175,17 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
         return store;
       }
       return {
-        generations: {
+        generations: pruneGenerations({
           ...store.generations,
           [generationId]: {
             ...current,
             ...snapshot,
+            ...(!isGenerationActive(snapshot.status)
+              ? { terminalAt: current.terminalAt ?? Date.now() }
+              : { terminalAt: undefined }),
             syncState: 'synced',
           },
-        },
+        }),
       };
     }),
   setDraft: (conversationId, content) =>
@@ -191,3 +202,30 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
     set({ generations: {}, drafts: {}, connectionStatus: 'connecting' }),
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
 }));
+
+const TERMINAL_RETENTION_MS = 30 * 60 * 1000;
+const TERMINAL_RETENTION_COUNT = 100;
+
+/** 活动任务永久保留；终态任务按时间和数量双重限制浏览器内存。 */
+function pruneGenerations(
+  generations: Record<string, ActiveGenerationState>,
+  now = Date.now(),
+): Record<string, ActiveGenerationState> {
+  const active = Object.values(generations).filter((generation) =>
+    isGenerationActive(generation.status),
+  );
+  const terminal = Object.values(generations)
+    .filter(
+      (generation) =>
+        !isGenerationActive(generation.status) &&
+        (generation.terminalAt ?? now) >= now - TERMINAL_RETENTION_MS,
+    )
+    .sort((left, right) => (right.terminalAt ?? now) - (left.terminalAt ?? now))
+    .slice(0, TERMINAL_RETENTION_COUNT);
+  return Object.fromEntries(
+    [...active, ...terminal].map((generation) => [
+      generation.generationId,
+      generation,
+    ]),
+  );
+}

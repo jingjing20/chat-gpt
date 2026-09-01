@@ -17,6 +17,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import Redis from 'ioredis';
+import { randomUUID } from 'node:crypto';
 import { API_ENV } from '../config/app-config';
 import { PrismaService } from '../database/prisma.service';
 import { ApiException } from '../http/api-exception';
@@ -32,7 +33,7 @@ export class EventsService implements OnApplicationShutdown {
     @Inject(API_ENV) private readonly environment: ApiEnv,
   ) {
     this.redis = new Redis({
-      ...redisConnectionOptions(environment.REDIS_URL),
+      ...redisConnectionOptions(environment.CONTROL_REDIS_URL),
       lazyConnect: true,
     });
     this.redis.on('error', () => {
@@ -53,14 +54,25 @@ export class EventsService implements OnApplicationShutdown {
     request: Request,
     response: Response,
   ): Promise<void> {
-    const connectionCount = this.connections.get(userId) ?? 0;
-    if (connectionCount >= this.environment.SSE_MAX_CONNECTIONS_PER_USER) {
+    const leaseToken = randomUUID();
+    let leaseAcquired: boolean;
+    try {
+      leaseAcquired = await this.acquireConnectionLease(userId, leaseToken);
+    } catch {
+      throw new ApiException(
+        'SSE_LEASE_UNAVAILABLE',
+        '实时连接安全服务暂时不可用，请稍后重试',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    if (!leaseAcquired) {
       throw new ApiException(
         'SSE_CONNECTION_LIMIT',
         '实时连接数已达上限，请关闭其他页面后重试',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+    const connectionCount = this.connections.get(userId) ?? 0;
     this.connections.set(userId, connectionCount + 1);
     this.recordConnectionCount();
     response.status(200);
@@ -87,6 +99,13 @@ export class EventsService implements OnApplicationShutdown {
     });
     try {
       while (!closed) {
+        if (!(await this.acquireConnectionLease(userId, leaseToken))) {
+          throw new ApiException(
+            'SSE_CONNECTION_LEASE_LOST',
+            '实时连接租约已失效，请重新连接',
+            HttpStatus.SERVICE_UNAVAILABLE,
+          );
+        }
         const result = await client.xread(
           'COUNT',
           100,
@@ -138,9 +157,57 @@ export class EventsService implements OnApplicationShutdown {
       if (remaining <= 0) this.connections.delete(userId);
       else this.connections.set(userId, remaining);
       this.recordConnectionCount();
+      await this.releaseConnectionLease(userId, leaseToken).catch(() => {
+        metrics.increment('chat_sse_lease_release_failures_total');
+      });
       client.disconnect();
       if (!response.writableEnded) response.end();
     }
+  }
+
+  /** 使用带 TTL 的 Redis ZSET 租约，使连接上限跨 API 实例生效。 */
+  private async acquireConnectionLease(
+    userId: string,
+    token: string,
+  ): Promise<boolean> {
+    const key = `${this.environment.EVENT_KEY_PREFIX}:sse:${userId}`;
+    const now = Date.now();
+    const ttl = Math.max(this.environment.EVENT_HEARTBEAT_MS * 3, 60_000);
+    const acquired = Number(
+      await this.redis.eval(
+        `
+        redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+        if redis.call('ZSCORE', KEYS[1], ARGV[2]) then
+          redis.call('ZADD', KEYS[1], ARGV[3], ARGV[2])
+          redis.call('PEXPIRE', KEYS[1], ARGV[4])
+          return 1
+        end
+        if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[5]) then return 0 end
+        redis.call('ZADD', KEYS[1], ARGV[3], ARGV[2])
+        redis.call('PEXPIRE', KEYS[1], ARGV[4])
+        return 1
+        `,
+        1,
+        key,
+        now,
+        token,
+        now + ttl,
+        ttl + 1_000,
+        this.environment.SSE_MAX_CONNECTIONS_PER_USER,
+      ),
+    );
+    metrics.gauge('chat_sse_lease_occupied', acquired, { service: 'api' });
+    return acquired === 1;
+  }
+
+  private async releaseConnectionLease(
+    userId: string,
+    token: string,
+  ): Promise<void> {
+    await this.redis.zrem(
+      `${this.environment.EVENT_KEY_PREFIX}:sse:${userId}`,
+      token,
+    );
   }
 
   /**
@@ -200,6 +267,7 @@ export class EventsService implements OnApplicationShutdown {
     generationId: string,
     afterSequence: number,
   ): Promise<GenerationEventHistory> {
+    metrics.increment('chat_generation_resync_total');
     const generation = await this.prisma.generation.findFirst({
       where: { id: generationId, userId },
       include: { responseMessage: true },
@@ -246,6 +314,9 @@ export class EventsService implements OnApplicationShutdown {
       (events.length === 0 && afterSequence === latestSequence) ||
       (events.length > 0 && isContiguous)
     ) {
+      metrics.increment('chat_generation_resync_results_total', {
+        mode: 'events',
+      });
       return {
         mode: 'events',
         events,
@@ -255,6 +326,9 @@ export class EventsService implements OnApplicationShutdown {
     const state = rawState
       ? (JSON.parse(rawState) as Record<string, unknown>)
       : {};
+    metrics.increment('chat_generation_resync_results_total', {
+      mode: 'snapshot',
+    });
     return {
       mode: 'snapshot',
       snapshot: {
@@ -278,7 +352,10 @@ export class EventsService implements OnApplicationShutdown {
    * 先固定用户流尾游标，再读取活动任务快照，消除“同步完成到开流之间”的丢事件窗口。
    */
   /** 汇总用户全部活动 generation 快照，供刷新或新标签页恢复。 */
-  async sync(userId: string): Promise<GenerationSyncResponse> {
+  async sync(
+    userId: string,
+    knownGenerationIds: string[] = [],
+  ): Promise<GenerationSyncResponse> {
     const userStream = eventKeys(
       this.environment.EVENT_KEY_PREFIX,
       userId,
@@ -291,20 +368,26 @@ export class EventsService implements OnApplicationShutdown {
       1,
     );
     const eventCursor = initialTail[0]?.[0] ?? '0-0';
-    const active = await this.prisma.generation.findMany({
-      where: {
-        userId,
-        status: {
-          in: [
-            GenerationStatus.QUEUED,
-            GenerationStatus.STARTING,
-            GenerationStatus.STREAMING,
-            GenerationStatus.CANCEL_REQUESTED,
-          ],
+    const [active, reconciled] = await Promise.all([
+      this.prisma.generation.findMany({
+        where: {
+          userId,
+          status: {
+            in: [
+              GenerationStatus.QUEUED,
+              GenerationStatus.STARTING,
+              GenerationStatus.STREAMING,
+              GenerationStatus.CANCEL_REQUESTED,
+            ],
+          },
         },
-      },
-      include: { responseMessage: true },
-    });
+        include: { responseMessage: true },
+      }),
+      this.prisma.generation.findMany({
+        where: { userId, id: { in: knownGenerationIds } },
+        include: { responseMessage: true },
+      }),
+    ]);
     const snapshotKeys = active.flatMap((generation) => {
       const keys = eventKeys(
         this.environment.EVENT_KEY_PREFIX,
@@ -324,6 +407,19 @@ export class EventsService implements OnApplicationShutdown {
       snapshotKeys.length,
       ...snapshotKeys,
     )) as string[];
+    const correctedTerminalCount = reconciled.filter(
+      (generation) =>
+        generation.status === GenerationStatus.COMPLETED ||
+        generation.status === GenerationStatus.FAILED ||
+        generation.status === GenerationStatus.CANCELLED,
+    ).length;
+    if (correctedTerminalCount > 0) {
+      metrics.increment(
+        'chat_generation_sync_reconciliations_total',
+        {},
+        correctedTerminalCount,
+      );
+    }
     return {
       eventCursor,
       activeGenerations: active.map((generation, index) => {
@@ -350,6 +446,16 @@ export class EventsService implements OnApplicationShutdown {
             : Number(generation.lastSequence),
         };
       }),
+      reconciledGenerations: reconciled.map((generation) => ({
+        generationId: generation.id,
+        conversationId: generation.conversationId,
+        messageId: generation.responseMessageId,
+        status: generation.status,
+        content: generation.responseMessage.content,
+        reasoningContent: generation.responseMessage.reasoningContent,
+        sequence: Number(generation.lastSequence),
+        error: generation.errorDetailSafe,
+      })),
     };
   }
 

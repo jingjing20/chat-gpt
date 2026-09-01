@@ -156,6 +156,9 @@ export class AuthService {
       session.expiresAt <= now ||
       session.user.status !== UserStatus.ACTIVE
     ) {
+      if (session?.revokedAt) {
+        await this.revokeRotationDescendants(session.id, now);
+      }
       await this.recordRejectedSession(session?.userId, tokenHash, context);
       throw this.invalidSession();
     }
@@ -185,11 +188,13 @@ export class AuthService {
         });
       });
     } catch (error) {
-      if (error instanceof ApiException) throw error;
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      const replayDetected =
+        error instanceof ApiException ||
+        (error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002');
+      if (replayDetected) {
+        await this.revokeRotationDescendants(session.id, now);
+        await this.recordRejectedSession(session.userId, tokenHash, context);
         throw this.invalidSession();
       }
       throw error;
@@ -295,6 +300,28 @@ export class AuthService {
         ipHash: this.security.hashAuditValue(context.ipAddress),
       },
     });
+  }
+
+  /** 发现旧刷新令牌重放时，撤销从该令牌派生出的全部后代会话。 */
+  private async revokeRotationDescendants(
+    sessionId: string,
+    revokedAt: Date,
+  ): Promise<void> {
+    await this.prisma.$executeRaw`
+      WITH RECURSIVE session_family AS (
+        SELECT "id"
+        FROM "refresh_sessions"
+        WHERE "id" = ${sessionId}::uuid
+        UNION ALL
+        SELECT child."id"
+        FROM "refresh_sessions" AS child
+        INNER JOIN session_family AS parent
+          ON child."rotated_from_id" = parent."id"
+      )
+      UPDATE "refresh_sessions"
+      SET "revoked_at" = COALESCE("revoked_at", ${revokedAt})
+      WHERE "id" IN (SELECT "id" FROM session_family)
+    `;
   }
 
   private invalidSession(): ApiException {

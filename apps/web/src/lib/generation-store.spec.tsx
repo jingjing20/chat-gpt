@@ -5,6 +5,7 @@ import {
   isGenerationActive,
   reduceGenerationEvent,
   selectConversationActivity,
+  useGenerationStore,
 } from './generation-store';
 import {
   isViewportNearBottom,
@@ -86,6 +87,36 @@ test('对话活动 selector 只汇总目标对话的活动任务', () => {
   assert.equal(result.activeCount, 1);
   assert.equal(isGenerationActive('CANCEL_REQUESTED'), true);
   assert.equal(isGenerationActive('COMPLETED'), false);
+});
+
+test('活动任务不清理，终态投影最多保留 100 条且淘汰过期项', () => {
+  useGenerationStore.getState().clear();
+  const base = reduceGenerationEvent(undefined, event(1)).state;
+  useGenerationStore.getState().register(base);
+  useGenerationStore.getState().register({
+    ...base,
+    generationId: 'expired',
+    status: 'COMPLETED',
+    terminalAt: Date.now() - 31 * 60 * 1000,
+  });
+  for (let index = 0; index < 105; index += 1) {
+    useGenerationStore.getState().register({
+      ...base,
+      generationId: `terminal-${index}`,
+      status: 'COMPLETED',
+      terminalAt: Date.now() + index,
+    });
+  }
+  const generations = useGenerationStore.getState().generations;
+  assert.ok(generations[base.generationId]);
+  assert.equal(generations.expired, undefined);
+  assert.equal(
+    Object.values(generations).filter(
+      (generation) => !isGenerationActive(generation.status),
+    ).length,
+    100,
+  );
+  useGenerationStore.getState().clear();
 });
 
 test('仅在视口贴近底部时保持自动滚动', () => {

@@ -1,6 +1,7 @@
 /** 实现 generation 幂等创建、用户授权查询、取消和重试状态管理。 */
 
 import type {
+  CreateConversationGenerationRequest,
   CreateGenerationRequest,
   CreateGenerationResponse,
   GenerationResponse,
@@ -424,5 +425,108 @@ export class GenerationsService {
 
   private notFound(message: string): never {
     throw new ApiException('NOT_FOUND', message, HttpStatus.NOT_FOUND);
+  }
+
+  /** 原子创建对话、首条消息、Generation 与入队 Outbox。 */
+  async createConversationWithGeneration(
+    userId: string,
+    idempotencyKey: string,
+    request: CreateConversationGenerationRequest,
+  ): Promise<CreateGenerationResponse> {
+    const requestHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          operation: 'create-conversation-generation',
+          title: request.title,
+          content: request.content,
+          clientMessageId: request.clientMessageId,
+        }),
+      )
+      .digest('hex');
+    const existing = await this.findByIdempotencyKey(userId, idempotencyKey);
+    if (existing) return this.resolveExisting(existing, requestHash);
+
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        await transaction.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtext(${userId})) IS NULL AS locked
+        `;
+        const activeCount = await transaction.generation.count({
+          where: { userId, status: { in: [...ACTIVE_STATUSES] } },
+        });
+        if (activeCount >= this.environment.USER_GENERATION_CONCURRENCY_LIMIT) {
+          throw new ApiException(
+            'USER_CONCURRENCY_LIMIT',
+            `同时最多运行 ${this.environment.USER_GENERATION_CONCURRENCY_LIMIT} 个生成任务`,
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+        const now = new Date();
+        const conversation = await transaction.conversation.create({
+          data: {
+            ownerUserId: userId,
+            title: request.title,
+            lastMessageAt: now,
+            userStates: { create: { userId, lastReadAt: now } },
+          },
+        });
+        const userMessage = await transaction.message.create({
+          data: {
+            id: request.clientMessageId,
+            conversationId: conversation.id,
+            authorUserId: userId,
+            role: MessageRole.USER,
+            status: MessageStatus.COMPLETED,
+            content: request.content,
+            completedAt: now,
+          },
+        });
+        const assistantMessage = await transaction.message.create({
+          data: {
+            conversationId: conversation.id,
+            role: MessageRole.ASSISTANT,
+            status: MessageStatus.PENDING,
+            content: '',
+          },
+        });
+        const generation = await transaction.generation.create({
+          data: {
+            userId,
+            conversationId: conversation.id,
+            requestMessageId: userMessage.id,
+            responseMessageId: assistantMessage.id,
+            provider: this.environment.LLM_PROVIDER,
+            model: this.environment.LLM_DEFAULT_MODEL,
+            idempotencyKey,
+            requestHash,
+          },
+        });
+        await transaction.outboxEvent.create({
+          data: {
+            aggregateType: 'generation',
+            aggregateId: generation.id,
+            type: 'generation.enqueue',
+            payload: { generationId: generation.id },
+          },
+        });
+        return {
+          conversation: { id: conversation.id },
+          userMessage: this.toMessage(userMessage),
+          assistantMessage: this.toMessage(assistantMessage),
+          generation: this.toGeneration(generation),
+        };
+      });
+    } catch (error) {
+      if (this.isUniqueConflict(error)) {
+        const raced = await this.findByIdempotencyKey(userId, idempotencyKey);
+        if (raced) return this.resolveExisting(raced, requestHash);
+        throw new ApiException(
+          'CLIENT_MESSAGE_ID_REUSED',
+          '客户端消息 ID 已被使用',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
   }
 }

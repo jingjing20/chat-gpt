@@ -29,6 +29,7 @@ import {
   createConfiguredModelProfile,
   fitMessagesToContextWindow,
 } from './context-window';
+import { enqueueTerminalEvent } from './terminal-event-outbox';
 
 const TERMINAL_STATUSES = [
   GenerationStatus.COMPLETED,
@@ -159,6 +160,32 @@ export class GenerationProcessor {
       return;
     }
     if (writerToken && generation.writerToken !== writerToken) return;
+    if (
+      generation.provider !== this.environment.LLM_PROVIDER ||
+      generation.model !== this.environment.LLM_DEFAULT_MODEL
+    ) {
+      const checkpoint = await this.prisma.message.findUniqueOrThrow({
+        where: { id: generation.responseMessageId },
+        select: { content: true, reasoningContent: true },
+      });
+      await this.finalizeFailed({
+        generationId,
+        userId: generation.userId,
+        conversationId: generation.conversationId,
+        responseMessageId: generation.responseMessageId,
+        content: checkpoint.content,
+        reasoningContent: checkpoint.reasoningContent ?? '',
+        sequence: Number(generation.lastSequence),
+        error: new ProviderError({
+          code: 'CONFIGURATION_MISMATCH',
+          safeMessage: '生成任务的模型配置与当前 Worker 不匹配',
+          retryableBeforeFirstDelta: false,
+        }),
+        provider: generation.provider,
+        model: generation.model,
+      });
+      return;
+    }
 
     const rawMessages = await this.loadContext(
       generation.conversationId,
@@ -429,15 +456,6 @@ export class GenerationProcessor {
           model: generation.model,
         });
         if (!finalized) return;
-        sequence = await this.publishEvent(
-          generation,
-          'generation.completed',
-          { finishReason, finalContentHash: this.contentHash(content) },
-          content,
-          reasoningContent,
-          'COMPLETED',
-        );
-        await this.updateLastSequence(generationId, sequence);
         return;
       } catch (error) {
         await flushDelta();
@@ -499,19 +517,6 @@ export class GenerationProcessor {
           model: generation.model,
         });
         if (!finalized) return;
-        sequence = await this.publishEvent(
-          generation,
-          'generation.failed',
-          {
-            code: normalized.code,
-            retryable: normalized.retryableBeforeFirstDelta,
-            safeMessage: normalized.message,
-          },
-          content,
-          reasoningContent,
-          'FAILED',
-        );
-        await this.updateLastSequence(generationId, sequence);
         return;
       } finally {
         clearInterval(cancelTimer);
@@ -609,18 +614,33 @@ export class GenerationProcessor {
     conversationId: string,
     responseMessageId: string,
   ): Promise<NormalizedChatMessage[]> {
-    const messages = await this.prisma.message.findMany({
-      where: {
-        conversationId,
-        id: { not: responseMessageId },
-        status: MessageStatus.COMPLETED,
-        role: {
-          in: [MessageRole.SYSTEM, MessageRole.USER, MessageRole.ASSISTANT],
+    const baseWhere = {
+      conversationId,
+      id: { not: responseMessageId },
+      status: MessageStatus.COMPLETED,
+    } as const;
+    const [systemMessages, recentMessages] = await Promise.all([
+      this.prisma.message.findMany({
+        where: { ...baseWhere, role: MessageRole.SYSTEM },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: 20,
+        select: { id: true, role: true, content: true, createdAt: true },
+      }),
+      this.prisma.message.findMany({
+        where: {
+          ...baseWhere,
+          role: { in: [MessageRole.USER, MessageRole.ASSISTANT] },
         },
-      },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: { role: true, content: true },
-    });
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: this.environment.GENERATION_CONTEXT_CANDIDATE_MESSAGES,
+        select: { id: true, role: true, content: true, createdAt: true },
+      }),
+    ]);
+    const messages = [...systemMessages, ...recentMessages].sort(
+      (left, right) =>
+        left.createdAt.getTime() - right.createdAt.getTime() ||
+        left.id.localeCompare(right.id),
+    );
     return messages.map((message) => ({
       role: message.role.toLowerCase() as NormalizedChatMessage['role'],
       content: message.content,
@@ -710,6 +730,20 @@ export class GenerationProcessor {
         data: { hasUnread: true },
       });
       if (input.usage) await this.createUsage(transaction, input, input.usage);
+      await enqueueTerminalEvent(transaction, {
+        userId: input.userId,
+        conversationId: input.conversationId,
+        generationId: input.generationId,
+        messageId: input.responseMessageId,
+        type: 'generation.completed',
+        payload: {
+          finishReason: input.finishReason,
+          finalContentHash: this.contentHash(input.content),
+        },
+        content: input.content,
+        reasoningContent: this.savedReasoning(input.reasoningContent),
+        status: 'COMPLETED',
+      });
       return true;
     });
     if (await this.isCancellationRequested(input.generationId)) {
@@ -766,6 +800,21 @@ export class GenerationProcessor {
         data: { hasUnread: true },
       });
       if (input.usage) await this.createUsage(transaction, input, input.usage);
+      await enqueueTerminalEvent(transaction, {
+        userId: input.userId,
+        conversationId: input.conversationId,
+        generationId: input.generationId,
+        messageId: input.responseMessageId,
+        type: 'generation.failed',
+        payload: {
+          code: input.error.code,
+          retryable: input.error.retryableBeforeFirstDelta,
+          safeMessage: input.error.message,
+        },
+        content: input.content,
+        reasoningContent: this.savedReasoning(input.reasoningContent),
+        status: 'FAILED',
+      });
       return true;
     });
     if (await this.isCancellationRequested(input.generationId)) {
@@ -837,19 +886,20 @@ export class GenerationProcessor {
         },
         data: { hasUnread: true },
       });
+      await enqueueTerminalEvent(transaction, {
+        userId: generation.userId,
+        conversationId: generation.conversationId,
+        generationId,
+        messageId: generation.responseMessageId,
+        type: 'generation.cancelled',
+        payload: { partial: Boolean(content || reasoningContent) },
+        content,
+        reasoningContent: this.savedReasoning(reasoningContent),
+        status: 'CANCELLED',
+      });
       return true;
     });
-    if (cancelled) {
-      const lastSequence = await this.publishEvent(
-        generation,
-        'generation.cancelled',
-        { partial: Boolean(content || reasoningContent) },
-        content,
-        reasoningContent,
-        'CANCELLED',
-      );
-      await this.updateLastSequence(generationId, lastSequence);
-    }
+    if (!cancelled) return;
   }
 
   private async createUsage(

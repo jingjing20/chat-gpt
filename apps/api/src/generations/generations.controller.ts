@@ -1,7 +1,9 @@
 /** 暴露 generation 创建、查询、取消和执行尝试记录接口。 */
 
 import {
+  createConversationGenerationRequestSchema,
   createGenerationRequestSchema,
+  type CreateConversationGenerationRequest,
   type CreateGenerationRequest,
 } from '@chat/contracts';
 import {
@@ -27,6 +29,21 @@ const idempotencyKeySchema = z.string().trim().min(1).max(100);
 @Controller()
 export class GenerationsController {
   constructor(private readonly generations: GenerationsService) {}
+
+  @Post('conversations/with-generation')
+  @HttpCode(HttpStatus.ACCEPTED)
+  createConversationWithGeneration(
+    @Req() request: Request,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body(new ZodBodyPipe(createConversationGenerationRequestSchema))
+    body: CreateConversationGenerationRequest,
+  ) {
+    return this.generations.createConversationWithGeneration(
+      request.auth!.userId,
+      this.idempotencyKey(idempotencyKey),
+      body,
+    );
+  }
 
   @Post('conversations/:conversationId/generations')
   @HttpCode(HttpStatus.ACCEPTED)

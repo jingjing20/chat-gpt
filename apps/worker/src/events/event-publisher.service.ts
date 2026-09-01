@@ -49,7 +49,9 @@ export class EventPublisherService implements OnApplicationShutdown {
   private readonly redis: Redis;
 
   constructor(@Inject(WORKER_ENV) environment: WorkerEnv) {
-    this.redis = new Redis(redisConnectionOptions(environment.REDIS_URL));
+    this.redis = new Redis(
+      redisConnectionOptions(environment.CONTROL_REDIS_URL),
+    );
     this.redis.on('error', () => {
       metrics.increment('chat_redis_client_errors_total', {
         service: 'worker',
@@ -92,7 +94,7 @@ export class EventPublisherService implements OnApplicationShutdown {
           keys.state,
           keys.generationStream,
           keys.userStream,
-          `${this.prefix}:event-dedupe:${base.eventId}`,
+          `${this.prefix}:{${input.userId}}:event-dedupe:${base.eventId}`,
           JSON.stringify(base),
           JSON.stringify(input.state),
           String(this.retentionMs),

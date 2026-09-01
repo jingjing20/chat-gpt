@@ -14,9 +14,11 @@ import {
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { Queue } from 'bullmq';
+import { metrics } from '@chat/observability';
 import { WORKER_ENV } from '../config/worker-config';
 import { PrismaService } from '../database/prisma.service';
 import { GENERATION_QUEUE_NAME } from './generation.constants';
+import { enqueueTerminalEvent } from './terminal-event-outbox';
 
 @Injectable()
 export class ZombieGenerationMonitorService
@@ -32,7 +34,7 @@ export class ZombieGenerationMonitorService
     @Inject(WORKER_ENV) private readonly environment: WorkerEnv,
   ) {
     this.queue = new Queue(GENERATION_QUEUE_NAME, {
-      connection: redisConnectionOptions(environment.REDIS_URL),
+      connection: redisConnectionOptions(environment.QUEUE_REDIS_URL),
       prefix: environment.GENERATION_QUEUE_PREFIX,
     });
   }
@@ -61,7 +63,16 @@ export class ZombieGenerationMonitorService
           writerToken: { not: null },
           writerHeartbeatAt: { lt: staleBefore },
         },
-        select: { id: true, responseMessageId: true, writerToken: true },
+        select: {
+          id: true,
+          userId: true,
+          conversationId: true,
+          responseMessageId: true,
+          writerToken: true,
+          responseMessage: {
+            select: { content: true, reasoningContent: true },
+          },
+        },
         take: 100,
       });
       let recovered = 0;
@@ -105,11 +116,36 @@ export class ZombieGenerationMonitorService
                 endedAt: now,
               },
             });
+            await transaction.conversationUserState.update({
+              where: {
+                conversationId_userId: {
+                  conversationId: generation.conversationId,
+                  userId: generation.userId,
+                },
+              },
+              data: { hasUnread: true },
+            });
+            await enqueueTerminalEvent(transaction, {
+              userId: generation.userId,
+              conversationId: generation.conversationId,
+              generationId: generation.id,
+              messageId: generation.responseMessageId,
+              type: 'generation.failed',
+              payload: {
+                code: 'WORKER_LOST',
+                retryable: false,
+                safeMessage: '生成进程意外中断，已保留收到的部分内容',
+              },
+              content: generation.responseMessage.content,
+              reasoningContent: generation.responseMessage.reasoningContent,
+              status: 'FAILED',
+            });
             return true;
           },
         );
         if (transitioned) {
           recovered += 1;
+          metrics.increment('chat_generation_worker_lost_total');
           this.logger.error(
             `僵尸 generation 已终结 generationId=${generation.id} code=WORKER_LOST`,
           );

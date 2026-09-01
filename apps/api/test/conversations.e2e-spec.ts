@@ -3,6 +3,7 @@
 import type { INestApplication } from '@nestjs/common';
 import {
   authResponseSchema,
+  conversationListResponseSchema,
   conversationResponseSchema,
   csrfResponseSchema,
   messagePageResponseSchema,
@@ -125,6 +126,37 @@ describe('API 阶段 2 对话与消息（端到端）', () => {
       .expect(({ body }: { body: { items: Array<{ id: string }> } }) => {
         expect(body.items.map((item) => item.id)).toEqual([conversationId]);
       });
+  });
+
+  it('对话列表使用稳定游标分页且没有重复或遗漏', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const csrfToken = await register(agent, 'conversation-pages@example.com');
+    for (const title of ['第一页', '第二页', '第三页']) {
+      await agent
+        .post('/api/v1/conversations')
+        .set('x-csrf-token', csrfToken)
+        .send({ title })
+        .expect(201);
+    }
+    const first = conversationListResponseSchema.parse(
+      (await agent.get('/api/v1/conversations').query({ limit: 2 }).expect(200))
+        .body,
+    );
+    expect(first.items).toHaveLength(2);
+    expect(first.nextCursor).not.toBeNull();
+    const second = conversationListResponseSchema.parse(
+      (
+        await agent
+          .get('/api/v1/conversations')
+          .query({ limit: 2, cursor: first.nextCursor })
+          .expect(200)
+      ).body,
+    );
+    expect(second.items).toHaveLength(1);
+    expect(second.nextCursor).toBeNull();
+    expect(
+      new Set([...first.items, ...second.items].map((item) => item.id)).size,
+    ).toBe(3);
   });
 
   it('只能永久删除已归档且没有活动生成任务的本人对话', async () => {

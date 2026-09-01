@@ -27,6 +27,11 @@ interface MessageCursor {
   createdAt: string;
 }
 
+interface ConversationCursor {
+  id: string;
+  updatedAt: string;
+}
+
 const ACTIVE_GENERATION_STATUSES = [
   GenerationStatus.QUEUED,
   GenerationStatus.STARTING,
@@ -54,7 +59,12 @@ export class ConversationsService {
   async list(
     userId: string,
     archived: boolean,
+    limit: number,
+    encodedCursor?: string,
   ): Promise<ConversationListResponse> {
+    const cursor = encodedCursor
+      ? this.decodeConversationCursor(encodedCursor)
+      : null;
     const conversations = await this.prisma.conversation.findMany({
       where: {
         ownerUserId: userId,
@@ -64,14 +74,39 @@ export class ConversationsService {
             archivedAt: archived ? { not: null } : null,
           },
         },
+        ...(cursor
+          ? {
+              OR: [
+                { updatedAt: { lt: new Date(cursor.updatedAt) } },
+                {
+                  updatedAt: new Date(cursor.updatedAt),
+                  id: { lt: cursor.id },
+                },
+              ],
+            }
+          : {}),
       },
       include: { userStates: { where: { userId }, take: 1 } },
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
     });
+    const hasMore = conversations.length > limit;
+    const page = conversations.slice(0, limit);
+    const last = page.at(-1);
     return {
-      items: conversations.map((conversation) =>
+      items: page.map((conversation) =>
         this.toConversation(conversation, conversation.userStates[0]),
       ),
+      nextCursor:
+        hasMore && last
+          ? Buffer.from(
+              JSON.stringify({
+                id: last.id,
+                updatedAt: last.updatedAt.toISOString(),
+              } satisfies ConversationCursor),
+              'utf8',
+            ).toString('base64url')
+          : null,
     };
   }
 
@@ -389,6 +424,29 @@ export class ConversationsService {
       throw new ApiException(
         'VALIDATION_ERROR',
         '消息游标不合法',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+  }
+
+  private decodeConversationCursor(value: string): ConversationCursor {
+    try {
+      const parsed = JSON.parse(
+        Buffer.from(value, 'base64url').toString('utf8'),
+      ) as Partial<ConversationCursor>;
+      if (
+        typeof parsed.id !== 'string' ||
+        !/^[0-9a-f-]{36}$/i.test(parsed.id) ||
+        typeof parsed.updatedAt !== 'string' ||
+        Number.isNaN(Date.parse(parsed.updatedAt))
+      ) {
+        throw new Error('游标格式错误');
+      }
+      return { id: parsed.id, updatedAt: parsed.updatedAt };
+    } catch {
+      throw new ApiException(
+        'VALIDATION_ERROR',
+        '对话游标不合法',
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }

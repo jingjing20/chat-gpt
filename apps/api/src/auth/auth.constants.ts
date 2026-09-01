@@ -7,3 +7,4 @@ export const CSRF_COOKIE = 'chat_csrf';
 export const IS_PUBLIC_KEY = 'isPublic';
 export const SKIP_CSRF_KEY = 'skipCsrf';
 export const AUTH_RATE_LIMIT_KEY = 'authRateLimit';
+export const AUTH_CONTROL_REDIS = Symbol('AUTH_CONTROL_REDIS');

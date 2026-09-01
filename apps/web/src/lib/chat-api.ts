@@ -44,9 +44,18 @@ export async function getCurrentUser() {
   return userResponseSchema.parse(await apiRequest('/auth/me'));
 }
 
-export async function listConversations(archived = false) {
+export async function listConversations(
+  archived = false,
+  cursor?: string,
+  limit = 50,
+) {
+  const search = new URLSearchParams({
+    archived: String(archived),
+    limit: String(limit),
+  });
+  if (cursor) search.set('cursor', cursor);
   return conversationListResponseSchema.parse(
-    await apiRequest(`/conversations?archived=${archived}`),
+    await apiRequest(`/conversations?${search}`),
   );
 }
 
@@ -137,14 +146,45 @@ export async function createMessage(conversationId: string, content: string) {
 export async function createGeneration(
   conversationId: string,
   content: string,
+  operation: GenerationOperation = createGenerationOperation(),
 ) {
   return createGenerationResponseSchema.parse(
     await apiRequest(`/conversations/${conversationId}/generations`, {
       method: 'POST',
-      headers: { 'Idempotency-Key': crypto.randomUUID() },
+      headers: { 'Idempotency-Key': operation.idempotencyKey },
       body: JSON.stringify({
         content,
-        clientMessageId: crypto.randomUUID(),
+        clientMessageId: operation.clientMessageId,
+      }),
+    }),
+  );
+}
+
+export interface GenerationOperation {
+  idempotencyKey: string;
+  clientMessageId: string;
+}
+
+export function createGenerationOperation(): GenerationOperation {
+  return {
+    idempotencyKey: crypto.randomUUID(),
+    clientMessageId: crypto.randomUUID(),
+  };
+}
+
+export async function createConversationWithGeneration(
+  title: string,
+  content: string,
+  operation: GenerationOperation,
+) {
+  return createGenerationResponseSchema.parse(
+    await apiRequest('/conversations/with-generation', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': operation.idempotencyKey },
+      body: JSON.stringify({
+        title,
+        content,
+        clientMessageId: operation.clientMessageId,
       }),
     }),
   );
@@ -183,8 +223,13 @@ export async function retryGeneration(generationId: string) {
   );
 }
 
-export async function syncGenerations() {
-  return generationSyncResponseSchema.parse(await apiRequest('/sync'));
+export async function syncGenerations(knownGenerationIds: string[] = []) {
+  const search = new URLSearchParams();
+  if (knownGenerationIds.length > 0) {
+    search.set('known_generation_ids', knownGenerationIds.join(','));
+  }
+  const suffix = search.size > 0 ? `?${search}` : '';
+  return generationSyncResponseSchema.parse(await apiRequest(`/sync${suffix}`));
 }
 
 export function conversationTimestamp(conversation: ConversationResponse) {

@@ -15,7 +15,9 @@ test('账户菜单在侧栏展开和收起时均可用', async ({ page }) => {
   await expect(page.getByRole('menuitem', { name: '设置' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: '退出登录' })).toBeVisible();
 
-  await page.getByRole('main').click({ position: { x: 400, y: 200 } });
+  const mainBox = await page.getByRole('main').boundingBox();
+  expect(mainBox).not.toBeNull();
+  await page.mouse.click((mainBox?.x ?? 0) + 400, (mainBox?.y ?? 0) + 200);
   await expect(page.getByRole('menuitem', { name: '设置' })).toHaveCount(0);
 
   await page.getByRole('button', { name: '收起侧边栏' }).click();

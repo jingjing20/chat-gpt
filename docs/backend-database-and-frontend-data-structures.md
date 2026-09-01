@@ -8,12 +8,12 @@
 
 项目不是把所有数据都放进一种存储，而是按生命周期分为四层：
 
-| 层 | 技术 | 保存内容 | 是否为长期真相源 |
-| --- | --- | --- | --- |
-| 持久业务数据 | PostgreSQL + Prisma | 用户、会话、消息、生成任务、尝试、用量、审计、Outbox | 是 |
-| 实时事件与临时快照 | Redis Streams / String | 生成增量、用户级事件流、sequence、恢复快照 | 否，有保留期 |
-| 服务端数据缓存 | TanStack Query | 当前用户、对话列表/详情、分页消息 | 否，可从 API 重取 |
-| 浏览器实时投影 | Zustand + sessionStorage | 活动生成内容、草稿、SSE 连接状态、事件游标 | 否，可同步恢复 |
+| 层                 | 技术                     | 保存内容                                             | 是否为长期真相源  |
+| ------------------ | ------------------------ | ---------------------------------------------------- | ----------------- |
+| 持久业务数据       | PostgreSQL + Prisma      | 用户、会话、消息、生成任务、尝试、用量、审计、Outbox | 是                |
+| 实时事件与临时快照 | Redis Streams / String   | 生成增量、用户级事件流、sequence、恢复快照           | 否，有保留期      |
+| 服务端数据缓存     | TanStack Query           | 当前用户、对话列表/详情、分页消息                    | 否，可从 API 重取 |
+| 浏览器实时投影     | Zustand + sessionStorage | 活动生成内容、草稿、SSE 连接状态、事件游标           | 否，可同步恢复    |
 
 核心原则是：PostgreSQL 保存最终一致的业务状态；Redis 负责低延迟传输和短期恢复；前端本地状态负责即时渲染。流式内容结束后，前端会重新获取数据库中的消息，使临时投影收敛到持久化结果。
 
@@ -87,53 +87,55 @@ stateDiagram-v2
 
 ### 4.1 `users`：用户主体
 
-| 字段 | 类型/约束 | 含义 |
-| --- | --- | --- |
-| `id` | UUID，主键 | 用户稳定标识 |
-| `email` | `CITEXT`，唯一 | 大小写不敏感邮箱；请求边界还会 trim、转小写并校验格式 |
-| `password_hash` | Text | 密码哈希，绝不保存明文 |
-| `status` | `UserStatus` | 账户状态，默认 `ACTIVE` |
-| `created_at` / `updated_at` | `TIMESTAMPTZ(3)` | 创建和更新时间 |
+| 字段                        | 类型/约束        | 含义                                                  |
+| --------------------------- | ---------------- | ----------------------------------------------------- |
+| `id`                        | UUID，主键       | 用户稳定标识                                          |
+| `email`                     | `CITEXT`，唯一   | 大小写不敏感邮箱；请求边界还会 trim、转小写并校验格式 |
+| `password_hash`             | Text             | 密码哈希，绝不保存明文                                |
+| `status`                    | `UserStatus`     | 账户状态，默认 `ACTIVE`                               |
+| `created_at` / `updated_at` | `TIMESTAMPTZ(3)` | 创建和更新时间                                        |
 
 `CITEXT` 扩展从数据库层阻止仅大小写不同的重复邮箱。删除用户会级联删除会话、用户状态、Generation 和刷新会话；消息作者采用 `SET NULL`，便于在其他保留场景中消除作者关联。
 
 ### 4.2 `refresh_sessions`：刷新令牌轮换链
 
-| 字段 | 类型/约束 | 含义 |
-| --- | --- | --- |
-| `id` | UUID，主键 | 会话标识 |
-| `user_id` | UUID，外键 | 所属用户 |
-| `token_hash` | `CHAR(64)`，唯一 | 刷新令牌的 SHA-256 类固定长度摘要，不保存原令牌 |
-| `user_agent_hash` | `CHAR(64)`，可空 | User-Agent 摘要，用于安全判断 |
-| `expires_at` | 时间 | 过期时间 |
-| `revoked_at` | 时间，可空 | 非空表示已撤销 |
-| `rotated_from_id` | UUID，自关联且唯一 | 指向被当前会话替换的上一刷新会话 |
-| `created_at` | 时间 | 创建时间 |
+| 字段              | 类型/约束          | 含义                                            |
+| ----------------- | ------------------ | ----------------------------------------------- |
+| `id`              | UUID，主键         | 会话标识                                        |
+| `user_id`         | UUID，外键         | 所属用户                                        |
+| `token_hash`      | `CHAR(64)`，唯一   | 刷新令牌的 SHA-256 类固定长度摘要，不保存原令牌 |
+| `user_agent_hash` | `CHAR(64)`，可空   | User-Agent 摘要，用于安全判断                   |
+| `expires_at`      | 时间               | 过期时间                                        |
+| `revoked_at`      | 时间，可空         | 非空表示已撤销                                  |
+| `rotated_from_id` | UUID，自关联且唯一 | 指向被当前会话替换的上一刷新会话                |
+| `created_at`      | 时间               | 创建时间                                        |
 
 `rotated_from_id` 的唯一约束使一个旧会话最多派生一个新会话，可用于识别令牌重复使用。索引 `(user_id, revoked_at, expires_at)` 支持按用户查找有效会话。
 
+刷新令牌一旦被轮换就不能再次使用。系统检测到旧令牌重放时，会沿 `rotated_from_id` 递归撤销它已经派生出的全部后代，避免攻击者继续使用重放前窃取的新令牌。
+
 ### 4.3 `audit_logs`：安全审计记录
 
-| 字段 | 含义 |
-| --- | --- |
-| `user_id` | 可空；未知用户的失败登录仍可审计 |
-| `action` / `outcome` | 发生的安全动作及成功/失败结果 |
-| `request_id` | 串联 HTTP 请求和日志的安全标识 |
-| `subject_id` | 被操作对象，例如被永久删除的 conversation ID |
-| `ip_hash` | IP 摘要，不记录原始 IP |
-| `created_at` | 事件时间 |
+| 字段                 | 含义                                         |
+| -------------------- | -------------------------------------------- |
+| `user_id`            | 可空；未知用户的失败登录仍可审计             |
+| `action` / `outcome` | 发生的安全动作及成功/失败结果                |
+| `request_id`         | 串联 HTTP 请求和日志的安全标识               |
+| `subject_id`         | 被操作对象，例如被永久删除的 conversation ID |
+| `ip_hash`            | IP 摘要，不记录原始 IP                       |
+| `created_at`         | 事件时间                                     |
 
 按 `(user_id, created_at DESC)` 与 `(action, created_at DESC)` 建索引，分别支持用户调查和动作类型调查。删除用户时审计记录保留，但 `user_id` 置空。
 
 ### 4.4 `conversations`：对话业务主体
 
-| 字段 | 类型/约束 | 含义 |
-| --- | --- | --- |
-| `id` | UUID，主键 | 对话标识 |
-| `owner_user_id` | UUID，外键 | 所有者；所有查询必须用认证用户限定 |
-| `title` | `VARCHAR(120)` | 对话标题 |
-| `last_message_at` | 时间，可空 | 最后一条消息业务时间，用于展示和排序语义 |
-| `created_at` / `updated_at` | 时间 | 生命周期时间 |
+| 字段                        | 类型/约束      | 含义                                     |
+| --------------------------- | -------------- | ---------------------------------------- |
+| `id`                        | UUID，主键     | 对话标识                                 |
+| `owner_user_id`             | UUID，外键     | 所有者；所有查询必须用认证用户限定       |
+| `title`                     | `VARCHAR(120)` | 对话标题                                 |
+| `last_message_at`           | 时间，可空     | 最后一条消息业务时间，用于展示和排序语义 |
+| `created_at` / `updated_at` | 时间           | 生命周期时间                             |
 
 索引 `(owner_user_id, updated_at DESC, id DESC)` 适合获取用户对话列表并以 ID 稳定打破相同时间。`last_message_at` 与 `updated_at` 不同：前者表达内容活跃时间，后者会因重命名等元数据操作变化；前端展示时间优先取前者。
 
@@ -141,13 +143,13 @@ stateDiagram-v2
 
 复合主键为 `(conversation_id, user_id)`。
 
-| 字段 | 含义 |
-| --- | --- |
-| `archived_at` | 是否归档及归档时间；归档不是删除 |
-| `last_read_at` | 最近标记已读时间 |
-| `scroll_offset` | 用户上次阅读位置，限制在 0～10,000,000 |
-| `has_unread` | Worker 生成终态结果后设为 `true`，进入对话并标记已读后清除 |
-| `created_at` / `updated_at` | 用户状态记录时间 |
+| 字段                        | 含义                                                       |
+| --------------------------- | ---------------------------------------------------------- |
+| `archived_at`               | 是否归档及归档时间；归档不是删除                           |
+| `last_read_at`              | 最近标记已读时间                                           |
+| `scroll_offset`             | 用户上次阅读位置，限制在 0～10,000,000                     |
+| `has_unread`                | Worker 生成终态结果后设为 `true`，进入对话并标记已读后清除 |
+| `created_at` / `updated_at` | 用户状态记录时间                                           |
 
 把这些字段从 `conversations` 拆出，即使当前产品是一对话一所有者，数据模型仍清晰区分“共享业务实体”和“某个用户的阅读/归档视角”。索引 `(user_id, archived_at, updated_at DESC)` 支持活动与归档列表。
 
@@ -155,34 +157,34 @@ stateDiagram-v2
 
 ### 4.6 `messages`：可持久化消息
 
-| 字段 | 类型/约束 | 含义 |
-| --- | --- | --- |
-| `id` | UUID，主键 | 消息标识；用户消息可使用客户端生成的 UUID |
-| `conversation_id` | UUID，外键 | 所属对话 |
-| `author_user_id` | UUID，可空 | 用户消息作者；助手和系统消息通常为空 |
-| `role` | `MessageRole` | 消息角色 |
-| `status` | `MessageStatus` | 消息生成状态 |
-| `content` | Text | 面向用户的正文；流式期间保存 checkpoint，终态保存完整内容 |
-| `reasoning_content` | Text，可空 | 模型 reasoning 内容，与普通正文分离 |
-| `parent_message_id` | UUID，自关联，可空 | 消息分支/父子关系的扩展基础；删除父消息时置空 |
-| `created_at` / `updated_at` | 时间 | 生命周期时间 |
-| `completed_at` | 时间，可空 | 进入终态的时间 |
+| 字段                        | 类型/约束          | 含义                                                      |
+| --------------------------- | ------------------ | --------------------------------------------------------- |
+| `id`                        | UUID，主键         | 消息标识；用户消息可使用客户端生成的 UUID                 |
+| `conversation_id`           | UUID，外键         | 所属对话                                                  |
+| `author_user_id`            | UUID，可空         | 用户消息作者；助手和系统消息通常为空                      |
+| `role`                      | `MessageRole`      | 消息角色                                                  |
+| `status`                    | `MessageStatus`    | 消息生成状态                                              |
+| `content`                   | Text               | 面向用户的正文；流式期间保存 checkpoint，终态保存完整内容 |
+| `reasoning_content`         | Text，可空         | 模型 reasoning 内容，与普通正文分离                       |
+| `parent_message_id`         | UUID，自关联，可空 | 消息分支/父子关系的扩展基础；删除父消息时置空             |
+| `created_at` / `updated_at` | 时间               | 生命周期时间                                              |
+| `completed_at`              | 时间，可空         | 进入终态的时间                                            |
 
 索引 `(conversation_id, created_at DESC, id DESC)` 与消息游标完全匹配。分页游标是 `{ id, createdAt }` 的 Base64URL JSON；下一页条件为“时间更早，或时间相同且 ID 更小”，比 offset 分页更能抵抗新消息插入。
 
 ### 4.7 `generations`：一次逻辑生成任务
 
-| 字段组 | 字段 | 作用 |
-| --- | --- | --- |
-| 归属 | `user_id`, `conversation_id` | 安全作用域与对话归属 |
-| 消息映射 | `request_message_id`, `response_message_id` | 一对一连接用户请求消息和助手响应消息，二者均唯一 |
-| 供应商 | `provider`, `model`, `provider_request_id` | 实际调用来源及供应商请求追踪 |
-| 状态 | `status`, `finish_reason`, `error_code`, `error_detail_safe` | 任务状态、停止原因和可安全返回的错误信息 |
-| 顺序恢复 | `last_sequence`, `checkpoint_sequence` | 已发布的最大事件序号与已持久化快照序号 |
-| 幂等 | `idempotency_key`, `request_hash` | 同用户请求去重，并检查同键是否被不同请求体复用 |
-| 写入租约 | `writer_token`, `writer_heartbeat_at` | 标识当前 Worker 写入者及心跳，用于防止双写和恢复僵尸任务 |
-| 时间点 | `cancel_requested_at`, `started_at`, `first_token_at`, `completed_at` | 取消、启动、首 Token、终态时间，可用于性能分析 |
-| 通用时间 | `created_at`, `updated_at` | 记录创建和更新 |
+| 字段组   | 字段                                                                  | 作用                                                     |
+| -------- | --------------------------------------------------------------------- | -------------------------------------------------------- |
+| 归属     | `user_id`, `conversation_id`                                          | 安全作用域与对话归属                                     |
+| 消息映射 | `request_message_id`, `response_message_id`                           | 一对一连接用户请求消息和助手响应消息，二者均唯一         |
+| 供应商   | `provider`, `model`, `provider_request_id`                            | 实际调用来源及供应商请求追踪                             |
+| 状态     | `status`, `finish_reason`, `error_code`, `error_detail_safe`          | 任务状态、停止原因和可安全返回的错误信息                 |
+| 顺序恢复 | `last_sequence`, `checkpoint_sequence`                                | 已发布的最大事件序号与已持久化快照序号                   |
+| 幂等     | `idempotency_key`, `request_hash`                                     | 同用户请求去重，并检查同键是否被不同请求体复用           |
+| 写入租约 | `writer_token`, `writer_heartbeat_at`                                 | 标识当前 Worker 写入者及心跳，用于防止双写和恢复僵尸任务 |
+| 时间点   | `cancel_requested_at`, `started_at`, `first_token_at`, `completed_at` | 取消、启动、首 Token、终态时间，可用于性能分析           |
+| 通用时间 | `created_at`, `updated_at`                                            | 记录创建和更新                                           |
 
 关键约束与索引：
 
@@ -204,18 +206,23 @@ stateDiagram-v2
 
 一条记录关联一个 Generation，保存 provider/model，以及 prompt、completion、total、reasoning、cache hit、cache miss token。字段可空是因为不同 OpenAI-compatible 供应商返回的用量明细不完全一致。允许一对多可以保留多次上报或尝试的用量事实，而不是把可变供应商结构塞进 Generation 主表。
 
-### 4.10 `outbox_events`：可靠入队意图
+### 4.10 `outbox_events`：可靠异步交付意图
 
-| 字段 | 含义 |
-| --- | --- |
-| `aggregate_type` / `aggregate_id` | 逻辑聚合类型与 ID；当前为 generation |
-| `type` | 当前主要为 `generation.enqueue` |
-| `payload` | JSONB；通过共享 Zod Schema 校验为 `{ generationId }` |
-| `published_at` | 空表示尚未成功投递 BullMQ |
-| `attempts` / `last_error` | 投递次数与安全错误码 |
-| `created_at` | 创建时间及投递顺序依据 |
+| 字段                              | 含义                                            |
+| --------------------------------- | ----------------------------------------------- |
+| `aggregate_type` / `aggregate_id` | 逻辑聚合类型与 ID；当前为 generation            |
+| `type`                            | `generation.enqueue` 或生成完成、失败、取消终态 |
+| `payload`                         | JSONB；入队载荷或带权威终态快照的版本化事件     |
+| `published_at`                    | 空表示尚未成功投递 BullMQ 或 Redis Stream       |
+| `attempts` / `last_error`         | 投递次数与安全错误码                            |
+| `next_attempt_at`                 | 指数退避后的下次可领取时间                      |
+| `locked_at` / `lock_token`        | 短期领取租约，允许崩溃后由其他 Relay 接管       |
+| `dead_lettered_at`                | 非空表示非法载荷或超过重试上限，等待人工处理    |
+| `created_at`                      | 创建时间及投递顺序依据                          |
 
-消息、Generation 和 Outbox 在同一 PostgreSQL 事务创建，避免“业务提交了但队列任务丢失”。Dispatcher 用 `FOR UPDATE SKIP LOCKED` 多实例并行领取记录，并以 `generationId` 作为 BullMQ `jobId` 去重。部分索引 `outbox_events_unpublished_created_at_idx` 只覆盖未发布行，优化热路径扫描。
+消息、Generation 和入队 Outbox 在同一 PostgreSQL 事务创建，避免“业务提交了但队列任务丢失”。Worker 也在提交消息、Generation、Attempt、Usage 和未读状态的同一事务中创建终态 Outbox，消除“数据库已完成但浏览器永远收不到终态”的崩溃窗口。
+
+Relay 用 `FOR UPDATE SKIP LOCKED` 短事务领取记录，释放事务后才访问 Redis/BullMQ，最后用另一个短事务确认。入队以 `generationId` 作为 BullMQ `jobId` 去重，终态以 Outbox ID 作为稳定 `eventId` 去重。失败记录退避重试；非法或超限记录进入死信且不自动删除。热路径索引只覆盖尚未发布、未死信且到达重试时间的记录。
 
 ## 5. 数据库级与服务层不变量
 
@@ -275,7 +282,7 @@ interface MessagePageResponse {
 
 ### 6.2 创建 Generation 的命令与响应
 
-请求体包含 `content` 和客户端生成的 `clientMessageId`，请求头另带 `Idempotency-Key`。成功响应同时返回：
+请求体包含 `content` 和客户端生成的 `clientMessageId`，请求头另带 `Idempotency-Key`。浏览器对同一逻辑操作的网络重试复用这两个 ID。新对话首问使用 `POST /conversations/with-generation`，在一个事务中同时创建对话、用户状态、两条消息、Generation 和 Outbox，因此失败不会留下孤立空对话。成功响应同时返回：
 
 - `{ id }` 形式的 conversation 摘要；
 - 已落库的用户消息；
@@ -299,14 +306,14 @@ interface ErrorResponse {
 
 ## 7. Redis 实时数据结构
 
-Redis 键使用用户 Hash Tag，使同一用户的键在 Redis Cluster 中落入同一 slot：
+生产环境将 BullMQ 放在 Queue Redis，将认证限流、SSE 租约和事件放在 Control/Event Redis；本地和测试可以指向同一实例。当前不采用 Redis Cluster。键名仍保留用户花括号命名，使同一用户的数据边界直观，并为 Lua 多键原子操作保持一致布局：
 
 ```text
 {prefix}:{userId}:gen:{generationId}:seq       单 Generation 递增序号
 {prefix}:{userId}:gen:{generationId}:state     最新完整快照 JSON
 {prefix}:{userId}:gen:{generationId}           Generation 专属 Stream
 {prefix}:{userId}:user                         用户级复用 Stream
-{prefix}:event-dedupe:{eventId}                发布幂等结果
+{prefix}:{userId}:event-dedupe:{eventId}       发布幂等结果
 ```
 
 Lua 脚本原子完成 `INCR sequence`、写快照、写 Generation Stream、写用户 Stream、裁剪用户历史、设置 TTL 和事件去重。因此同一个逻辑事件在专属流与用户流中共享相同 `sequence`，但有不同用途：
@@ -320,12 +327,12 @@ Lua 脚本原子完成 `INCR sequence`、写快照、写 Generation Stream、写
 interface UserEvent {
   version: 1;
   eventId: string;
-  streamId: string;       // Redis 用户 Stream ID，例如 1720000000000-0
+  streamId: string; // Redis 用户 Stream ID，例如 1720000000000-0
   type: GenerationEventType;
   conversationId: string;
   generationId: string;
   messageId: string;
-  sequence: number;       // 单个 Generation 内严格递增
+  sequence: number; // 单个 Generation 内严格递增
   occurredAt: string;
   payload: Record<string, unknown>;
 }
@@ -333,16 +340,16 @@ interface UserEvent {
 
 事件类型及前端含义：
 
-| 事件 | 主要 payload | 前端动作 |
-| --- | --- | --- |
-| `generation.started` | 启动信息 | 状态设为 `STARTING` |
-| `message.reasoning_delta` | `delta` | 追加 reasoning |
-| `message.delta` | `delta` | 追加普通正文并设为 `STREAMING` |
-| `message.snapshot` | `content`, `reasoningContent`, `snapshotSequence` | 完整替换本地内容和序号 |
-| `generation.usage` | Token 用量 | 当前 reducer 不渲染，由后端持久化 |
-| `generation.completed` | 完成信息 | 设为 `COMPLETED` 并刷新权威缓存 |
-| `generation.failed` | `safeMessage` 等 | 设为 `FAILED`，保存可展示错误 |
-| `generation.cancelled` | 取消信息 | 设为 `CANCELLED` |
+| 事件                      | 主要 payload                                      | 前端动作                          |
+| ------------------------- | ------------------------------------------------- | --------------------------------- |
+| `generation.started`      | 启动信息                                          | 状态设为 `STARTING`               |
+| `message.reasoning_delta` | `delta`                                           | 追加 reasoning                    |
+| `message.delta`           | `delta`                                           | 追加普通正文并设为 `STREAMING`    |
+| `message.snapshot`        | `content`, `reasoningContent`, `snapshotSequence` | 完整替换本地内容和序号            |
+| `generation.usage`        | Token 用量                                        | 当前 reducer 不渲染，由后端持久化 |
+| `generation.completed`    | 完成信息                                          | 设为 `COMPLETED` 并刷新权威缓存   |
+| `generation.failed`       | `safeMessage` 等                                  | 设为 `FAILED`，保存可展示错误     |
+| `generation.cancelled`    | 取消信息                                          | 设为 `CANCELLED`                  |
 
 ## 8. 前端关键数据结构
 
@@ -351,11 +358,11 @@ interface UserEvent {
 Query Key 采用层级结构：
 
 ```ts
-currentUser                         = ['current-user']
-conversations.all                  = ['conversations']
-conversations.list(archived)       = ['conversations', 'list', { archived }]
-conversations.detail(id)           = ['conversations', 'detail', id]
-conversations.messages(id)         = ['conversations', 'messages', id]
+currentUser = ['current-user'];
+conversations.all = ['conversations'];
+conversations.list(archived) = ['conversations', 'list', { archived }];
+conversations.detail(id) = ['conversations', 'detail', id];
+conversations.messages(id) = ['conversations', 'messages', id];
 ```
 
 这种前缀设计允许终态事件通过 `conversations.all` 一次失效活动列表、归档列表等所有对话查询，同时能只刷新特定对话的消息。
@@ -375,6 +382,7 @@ interface ActiveGenerationState {
   lastAppliedSequence: number;
   syncState: 'synced' | 'resyncing';
   error?: string;
+  terminalAt?: number;
 }
 
 interface GenerationStore {
@@ -400,7 +408,7 @@ event.sequence >  lastAppliedSequence + 1  gap，标记 resyncing
 
 Delta 只能追加到连续状态；Snapshot 则完整替换正文和 reasoning。这个规则防止 SSE 重连时重复内容，也防止漏事件后继续追加导致回答永久损坏。
 
-`register` 同样拒绝较旧初始状态覆盖较新的本地状态；`replaceSnapshot` 拒绝序号倒退。终态对象目前不会立即从 Store 删除，它继续作为页面 overlay，直到页面数据和后续生命周期处理使其不再产生影响。
+`register` 同样拒绝较旧初始状态覆盖较新的本地状态；`replaceSnapshot` 拒绝序号倒退。活动任务不因时间被清理；终态对象最多保留 30 分钟和最近 100 条，避免长时间打开页面后浏览器状态无限增长。
 
 ### 8.4 服务端消息与实时 Overlay 的合并
 
@@ -426,7 +434,7 @@ Zustand ActiveGenerationState（同 messageId）
 sessionStorage['chat.eventCursor.{userId}']
 ```
 
-它按用户隔离且只在当前浏览器标签生命周期内存在。首次连接先调用 `/sync`：API 先固定用户流尾游标，再读取所有活动 Generation 的 Redis/数据库快照。前端注册快照、保存游标后再建立 SSE，从而消除“同步完成到开流之间”的丢事件窗口。
+它按用户隔离且只在当前浏览器标签生命周期内存在。首次连接先调用 `/sync`：API 先固定用户流尾游标，再读取所有活动 Generation 的 Redis/数据库快照。浏览器同时提交自己已知的活动 Generation ID；即使终态 Redis 事件曾丢失，API 也会返回 PostgreSQL 权威终态用于修复。前端注册或对账快照、保存游标后再建立 SSE，从而消除“同步完成到开流之间”的丢事件窗口。
 
 断线使用指数退避加抖动重连，最大基础等待 15 秒。服务端还提供 heartbeat、每用户连接数限制、响应缓冲上限和 drain 超时；过慢客户端会被断开，再依靠游标恢复。
 
@@ -465,8 +473,8 @@ sequenceDiagram
 5. Worker 调用标准化 LLM Adapter；增量经 Lua 原子写入 Redis sequence、快照和两个 Stream。
 6. API 从用户级 Stream 读取事件并通过 SSE 转发；Web 按 Generation sequence 归并。
 7. Worker 周期性把完整内容 checkpoint 到 `messages`，并推进 `checkpoint_sequence`。
-8. 完成、失败或取消时，Worker 在数据库事务中写消息和 Generation 终态、Attempt、用量及未读状态。
-9. Worker 发布终态事件；Web 刷新消息和对话缓存，实时投影收敛到 PostgreSQL。
+8. 完成、失败或取消时，Worker 在数据库事务中写消息和 Generation 终态、Attempt、用量、未读状态及终态 Outbox。
+9. Outbox Relay 用稳定事件 ID 将终态投递到 Redis；Web 刷新消息和对话缓存，实时投影收敛到 PostgreSQL。若事件暂未投递，后续 `/sync` 对账仍可修复终态。
 
 ## 11. 修改数据结构时的检查清单
 

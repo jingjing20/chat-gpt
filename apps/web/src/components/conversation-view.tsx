@@ -2,12 +2,14 @@
 
 import {
   cancelGeneration,
+  createGenerationOperation,
   createGeneration,
   getConversation,
   listMessages,
   markConversationRead,
   retryGeneration,
   saveScrollPosition,
+  type GenerationOperation,
 } from '@/lib/chat-api';
 import { ApiClientError } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
@@ -62,6 +64,10 @@ export function ConversationView({
   const ignoredProgrammaticScrollOffsetRef = useRef<number | null>(null);
   const persistedScrollOffsetRef = useRef<number | null>(null);
   const shouldFollowStreamingRef = useRef(true);
+  const pendingOperationRef = useRef<{
+    message: string;
+    operation: GenerationOperation;
+  } | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const content = useGenerationStore(
     (state) => state.drafts[conversationId] ?? '',
@@ -142,12 +148,13 @@ export function ConversationView({
     [conversationId, queryClient],
   );
   const sendMutation = useMutation({
-    mutationFn: (message: string) => createGeneration(conversationId, message),
-    onMutate: (message) => {
+    mutationFn: (input: { message: string; operation: GenerationOperation }) =>
+      createGeneration(conversationId, input.message, input.operation),
+    onMutate: (input) => {
       useGenerationStore.getState().clearDraft(conversationId);
-      return { message };
+      return { message: input.message };
     },
-    onError: (_error, _message, context) => {
+    onError: (_error, _input, context) => {
       if (
         context?.message &&
         !useGenerationStore.getState().drafts[conversationId]
@@ -156,6 +163,7 @@ export function ConversationView({
       }
     },
     onSuccess: async (result) => {
+      pendingOperationRef.current = null;
       useGenerationStore.getState().register({
         generationId: result.generation.id,
         conversationId: result.generation.conversationId,
@@ -380,7 +388,14 @@ export function ConversationView({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const message = content.trim();
-    if (message) sendMutation.mutate(message);
+    if (!message) return;
+    const pending = pendingOperationRef.current;
+    const operation =
+      pending?.message === message
+        ? pending.operation
+        : createGenerationOperation();
+    pendingOperationRef.current = { message, operation };
+    sendMutation.mutate({ message, operation });
   }
 
   function sendMutationErrorMessage() {

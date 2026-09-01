@@ -6,6 +6,7 @@ import {
   createGenerationResponseSchema,
   csrfResponseSchema,
   generationEventHistorySchema,
+  generationSyncResponseSchema,
 } from '@chat/contracts';
 import type { INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
@@ -155,6 +156,49 @@ describe('API 阶段 7 事件恢复（端到端）', () => {
       .get(`/api/v1/generations/${owner.generation.generationId}/events`)
       .expect(404);
     await redis.del(keys.generationStream!, keys.sequence!);
+  });
+
+  it('/sync 使用 PostgreSQL 终态修复浏览器已知的活动任务', async () => {
+    const { agent, generation } = await createGeneration(
+      'sync-reconcile@example.com',
+    );
+    await prisma.$transaction([
+      prisma.message.update({
+        where: { id: generation.messageId },
+        data: {
+          status: 'FAILED',
+          content: '数据库保留的部分内容',
+          completedAt: new Date(),
+        },
+      }),
+      prisma.generation.update({
+        where: { id: generation.generationId },
+        data: {
+          status: 'FAILED',
+          errorCode: 'WORKER_LOST',
+          errorDetailSafe: '生成进程意外终止，请重试',
+          completedAt: new Date(),
+        },
+      }),
+    ]);
+
+    const sync = generationSyncResponseSchema.parse(
+      (
+        await agent
+          .get('/api/v1/sync')
+          .query({ known_generation_ids: generation.generationId })
+          .expect(200)
+      ).body,
+    );
+    expect(sync.activeGenerations).toHaveLength(0);
+    expect(sync.reconciledGenerations).toEqual([
+      expect.objectContaining({
+        generationId: generation.generationId,
+        status: 'FAILED',
+        content: '数据库保留的部分内容',
+        error: '生成进程意外终止，请重试',
+      }),
+    ]);
   });
 
   afterAll(async () => {

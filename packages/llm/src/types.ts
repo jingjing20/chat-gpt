@@ -39,6 +39,7 @@ export type ProviderErrorCode =
   | 'TIMEOUT'
   | 'CONNECTION_LOST'
   | 'MALFORMED_STREAM'
+  | 'CONFIGURATION_MISMATCH'
   | 'UNKNOWN';
 
 export interface LlmProviderAdapter {

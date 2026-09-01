@@ -26,7 +26,7 @@
     "format:check": "prettier --check .",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "test:e2e": "pnpm --filter @chat/api test:e2e && pnpm --filter @chat/worker test:e2e && pnpm --filter @chat/web test:e2e",
+    "test:e2e": "pnpm test:e2e:prepare && pnpm --filter @chat/api test:e2e && pnpm --filter @chat/worker test:e2e && pnpm --filter @chat/web test:e2e",
     "test:e2e:prepare": "pnpm --filter @chat/database db:test:prepare",
     "typecheck": "turbo run typecheck",
     "infra:up": "docker compose -f infra/compose/compose.yml up -d",

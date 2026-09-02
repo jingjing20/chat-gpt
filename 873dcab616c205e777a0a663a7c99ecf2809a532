@@ -1,0 +1,44 @@
+packages/database/prisma/migrations/20260902000200_baseline/migration.sql
+  fa35753f2daa5d23 1-15,17-25,28-36,38-73,83,93-94,110,144-147,151-181,184-209,211-255
+docs/runbooks/local-development.md
+  fa35753f2daa5d23 61-77
+docs/phase-7-10-acceptance.md
+  fa35753f2daa5d23 124
+docs/phase-10-security-checklist.md
+  fa35753f2daa5d23 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "bzl_git_version": "0.1.32",
+  "base_commit_sha": "873dcab616c205e777a0a663a7c99ecf2809a532",
+  "prompts": {
+    "57ad12e10d772f97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04b74-1954-7e02-988e-020da20a7cab",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 55,
+      "total_deletions": 0,
+      "accepted_lines": 55,
+      "overriden_lines": 0
+    },
+    "fa35753f2daa5d23": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06189-466f-7ff1-8283-df2ebcbc127d",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 275,
+      "total_deletions": 251,
+      "accepted_lines": 274,
+      "overriden_lines": 0
+    }
+  }
+}

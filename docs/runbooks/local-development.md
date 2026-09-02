@@ -58,6 +58,23 @@ pnpm db:migrate:deploy
 生产部署只使用 `db:migrate:deploy`，并应在应用实例启动前作为独立发布步骤执行，
 不得依赖开发启动脚本。开发迁移命令 `db:migrate:dev` 会生成新迁移，只能在明确修改 Schema 时运行。
 
+2026-09-02 在首次对外部署前，历史迁移已压平为单一 baseline。仍保存旧迁移记录的本地数据库
+不能直接继续部署新基线，必须删除并重建 `chat` 和 `chat_test` 两个项目数据库，同时清空项目
+Redis，避免队列记录引用已删除的数据。确认只连接本项目的 `127.0.0.1:15432` 后，可执行：
+
+```bash
+dropdb -h 127.0.0.1 -p 15432 -U postgres --if-exists chat
+dropdb -h 127.0.0.1 -p 15432 -U postgres --if-exists chat_test
+createdb -h 127.0.0.1 -p 15432 -U postgres -O chat chat
+createdb -h 127.0.0.1 -p 15432 -U postgres -O chat chat_test
+redis-cli -h 127.0.0.1 -p 16379 FLUSHALL
+pnpm db:migrate:deploy
+pnpm test:e2e:prepare
+```
+
+上述操作会永久删除本地开发和测试数据。baseline 首次进入共享预发或生产环境后，禁止再次
+改写迁移历史；后续数据库结构变更必须新增迁移。
+
 ## 认证调用
 
 客户端先调用 `GET /api/v1/auth/csrf`。后续写请求必须携带 Cookie，并把响应中的 `csrfToken` 放入 `x-csrf-token` 请求头。访问令牌和刷新令牌为 HttpOnly Cookie，不应由浏览器脚本读取。

@@ -121,7 +121,7 @@ k6 直接统计 HTTP 与 generation 创建延迟，测试结束后另行核对 W
 - `pnpm audit --audit-level high` 初次发现 2 个高危传递依赖，覆盖到修复版本后复扫为 0；
 - Gitleaks 8.30.1 扫描 23 个提交及当前目录，结果为 0；历史 Nest 示例 token 和固定幂等 UUID使用精确值白名单，不放宽通用规则；
 - Trivy 0.74.0 扫描 `pnpm-lock.yaml`、配置和秘密，HIGH/CRITICAL 结果为 0；无 Docker 环境通过临时空 `DOCKER_CONFIG` 直接下载公开漏洞库；
-- PostgreSQL `pg_dump -Fc` 备份 1 秒，隔离数据库恢复 1 秒；12 张表、6 条迁移一致，备份 SHA-256 为 `95fe7182244136eff9163c9cce8a359a486bca46a7d1ec42f6f267fb35dabeab`；
+- PostgreSQL `pg_dump -Fc` 备份 1 秒，隔离数据库恢复 1 秒；12 张表、当时的 6 条迁移一致，备份 SHA-256 为 `95fe7182244136eff9163c9cce8a359a486bca46a7d1ec42f6f267fb35dabeab`；该历史迁移已于首次对外部署前压平为单一 baseline，原记录仅作为当时的验收证据；
 - Redis 事件丢失、generation/worker/outbox 故障和供应商密钥轮换 runbook 已存在；CI 新增 Redis 服务、依赖审计、Gitleaks 与 Trivy 阻断检查。
 
 ## Docker 不可用时的操作方式

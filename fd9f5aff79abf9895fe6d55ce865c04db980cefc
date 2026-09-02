@@ -1,0 +1,68 @@
+packages/database/prisma/migrations/20260902000100_generation_modes/migration.sql
+  cb5a946b6960abb5 1-2
+apps/web/src/app/globals.css
+  cb5a946b6960abb5 904,915,930-972,1713,1748-1752,1754,1760
+apps/web/test/multi-conversation.e2e-spec.ts
+  cb5a946b6960abb5 6-39
+packages/contracts/src/index.ts
+  cb5a946b6960abb5 162,177
+AGENTS.md
+  cb5a946b6960abb5 35-39
+apps/web/src/lib/chat-api.ts
+  cb5a946b6960abb5 150,159,170-177,189,199
+apps/api/src/generations/generations.service.ts
+  cb5a946b6960abb5 107,281,354,389,409,448,506
+apps/web/src/components/generation-mode-toggles.tsx
+  cb5a946b6960abb5 1-33
+packages/database/prisma/schema.prisma
+  cb5a946b6960abb5 142
+packages/llm/src/openai-compatible-adapter.spec.ts
+  cb5a946b6960abb5 80-115
+apps/api/test/generations.e2e-spec.ts
+  cb5a946b6960abb5 84,95-105,386-390,431
+packages/llm/src/openai-compatible-adapter.ts
+  cb5a946b6960abb5 114-118
+apps/web/src/components/new-conversation-start.tsx
+  cb5a946b6960abb5 6-7,16,25,31,37,43,73-75,101-105
+apps/worker/src/generation/generation.processor.ts
+  cb5a946b6960abb5 199-201,370-372
+apps/web/src/components/conversation-view.tsx
+  cb5a946b6960abb5 7,14,49,73,75,156-166,411-413,587-591
+apps/worker/test/generation.e2e-spec.ts
+  cb5a946b6960abb5 53-57,99,397-401,445
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "bzl_git_version": "0.1.32",
+  "base_commit_sha": "fd9f5aff79abf9895fe6d55ce865c04db980cefc",
+  "prompts": {
+    "57ad12e10d772f97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04b74-1954-7e02-988e-020da20a7cab",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 539,
+      "total_deletions": 0,
+      "accepted_lines": 539,
+      "overriden_lines": 0
+    },
+    "cb5a946b6960abb5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a060e6-999c-7872-b204-aaa112e2b588",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 512,
+      "total_deletions": 67,
+      "accepted_lines": 268,
+      "overriden_lines": 1
+    }
+  }
+}

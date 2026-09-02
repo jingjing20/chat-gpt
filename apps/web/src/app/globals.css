@@ -901,6 +901,7 @@ textarea:focus-visible {
 }
 
 .home-composer textarea {
+  grid-column: 1 / -1;
   min-height: 54px;
   max-height: 180px;
   padding: 15px 4px;
@@ -911,7 +912,7 @@ textarea:focus-visible {
   line-height: 1.5;
 }
 
-.home-composer button {
+.home-composer > button {
   display: grid;
   width: 36px;
   height: 36px;
@@ -924,6 +925,49 @@ textarea:focus-visible {
   color: #07110c;
   font-size: 20px;
   font-weight: 800;
+}
+
+.generation-mode-toggles {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.generation-mode-toggles button {
+  display: inline-flex;
+  width: auto;
+  height: 34px;
+  padding: 0 11px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    color 150ms ease;
+}
+
+.generation-mode-toggles button:not(:disabled):hover {
+  border-color: rgba(154, 245, 189, 0.35);
+  color: var(--text);
+}
+
+.generation-mode-toggles button.active {
+  border-color: rgba(154, 245, 189, 0.55);
+  background: rgba(154, 245, 189, 0.1);
+  color: var(--accent);
+}
+
+.generation-mode-toggles button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .home-composer-error {
@@ -1666,6 +1710,7 @@ textarea:focus-visible {
 }
 
 .composer textarea {
+  grid-column: 1 / -1;
   min-height: 42px;
   max-height: 160px;
   padding: 10px 4px 8px;
@@ -1700,14 +1745,19 @@ textarea:focus-visible {
     opacity 150ms ease;
 }
 
+.composer-panel > .generation-mode-toggles,
+.home-composer > .generation-mode-toggles {
+  grid-column: 1;
+}
+
 .composer-panel > button:not(:disabled):hover,
-.home-composer button:not(:disabled):hover {
+.home-composer > button:not(:disabled):hover {
   background: #aff8ca;
   transform: translateY(-1px);
 }
 
 .composer-panel > button:disabled,
-.home-composer button:disabled {
+.home-composer > button:disabled {
   background: #3a423e;
   color: #768079;
   opacity: 1;

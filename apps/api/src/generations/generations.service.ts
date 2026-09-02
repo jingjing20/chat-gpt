@@ -104,6 +104,7 @@ export class GenerationsService {
             responseMessageId: assistantMessage.id,
             provider: this.environment.LLM_PROVIDER,
             model: this.environment.LLM_DEFAULT_MODEL,
+            reasoningEnabled: request.reasoningEnabled,
             idempotencyKey,
             requestHash,
           },
@@ -277,6 +278,7 @@ export class GenerationsService {
             responseMessageId: assistantMessage.id,
             provider: this.environment.LLM_PROVIDER,
             model: this.environment.LLM_DEFAULT_MODEL,
+            reasoningEnabled: source.reasoningEnabled,
             idempotencyKey,
             requestHash,
           },
@@ -349,6 +351,7 @@ export class GenerationsService {
           conversationId,
           clientMessageId: request.clientMessageId,
           content: request.content,
+          reasoningEnabled: request.reasoningEnabled,
         }),
       )
       .digest('hex');
@@ -383,6 +386,7 @@ export class GenerationsService {
     responseMessageId: string;
     provider: string;
     model: string;
+    reasoningEnabled: boolean;
     status: GenerationStatus;
     lastSequence: bigint;
     finishReason: string | null;
@@ -402,6 +406,7 @@ export class GenerationsService {
       responseMessageId: generation.responseMessageId,
       provider: generation.provider,
       model: generation.model,
+      reasoningEnabled: generation.reasoningEnabled,
       status: generation.status,
       lastSequence: Number(generation.lastSequence),
       finishReason: generation.finishReason,
@@ -440,6 +445,7 @@ export class GenerationsService {
           title: request.title,
           content: request.content,
           clientMessageId: request.clientMessageId,
+          reasoningEnabled: request.reasoningEnabled,
         }),
       )
       .digest('hex');
@@ -497,6 +503,7 @@ export class GenerationsService {
             responseMessageId: assistantMessage.id,
             provider: this.environment.LLM_PROVIDER,
             model: this.environment.LLM_DEFAULT_MODEL,
+            reasoningEnabled: request.reasoningEnabled,
             idempotencyKey,
             requestHash,
           },

@@ -4,12 +4,14 @@ import {
   cancelGeneration,
   createGenerationOperation,
   createGeneration,
+  DEFAULT_GENERATION_MODES,
   getConversation,
   listMessages,
   markConversationRead,
   retryGeneration,
   saveScrollPosition,
   type GenerationOperation,
+  type GenerationModes,
 } from '@/lib/chat-api';
 import { ApiClientError } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
@@ -44,6 +46,7 @@ import {
   shouldShowScrollToBottom,
 } from '@/lib/scroll-follow';
 import type { ConversationResponse } from '@chat/contracts';
+import { GenerationModeToggles } from './generation-mode-toggles';
 
 /**
  * 把服务端消息缓存与当前对话的实时 overlay 合并，仅渲染该对话的生成状态。
@@ -67,7 +70,9 @@ export function ConversationView({
   const pendingOperationRef = useRef<{
     message: string;
     operation: GenerationOperation;
+    modes: GenerationModes;
   } | null>(null);
+  const [modes, setModes] = useState<GenerationModes>(DEFAULT_GENERATION_MODES);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const content = useGenerationStore(
     (state) => state.drafts[conversationId] ?? '',
@@ -148,8 +153,17 @@ export function ConversationView({
     [conversationId, queryClient],
   );
   const sendMutation = useMutation({
-    mutationFn: (input: { message: string; operation: GenerationOperation }) =>
-      createGeneration(conversationId, input.message, input.operation),
+    mutationFn: (input: {
+      message: string;
+      operation: GenerationOperation;
+      modes: GenerationModes;
+    }) =>
+      createGeneration(
+        conversationId,
+        input.message,
+        input.operation,
+        input.modes,
+      ),
     onMutate: (input) => {
       useGenerationStore.getState().clearDraft(conversationId);
       return { message: input.message };
@@ -394,8 +408,9 @@ export function ConversationView({
       pending?.message === message
         ? pending.operation
         : createGenerationOperation();
-    pendingOperationRef.current = { message, operation };
-    sendMutation.mutate({ message, operation });
+    const selectedModes = pending?.message === message ? pending.modes : modes;
+    pendingOperationRef.current = { message, operation, modes: selectedModes };
+    sendMutation.mutate({ message, operation, modes: selectedModes });
   }
 
   function sendMutationErrorMessage() {
@@ -568,6 +583,11 @@ export function ConversationView({
             ref={textareaRef}
             rows={1}
             value={content}
+          />
+          <GenerationModeToggles
+            disabled={sendMutation.isPending}
+            modes={modes}
+            onChange={setModes}
           />
           <button
             aria-label="发送消息"

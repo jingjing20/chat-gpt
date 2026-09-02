@@ -50,7 +50,11 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
   });
 
   it('首 delta 前可重试，最终持久化完整正文、reasoning 和 usage', async () => {
-    const generationId = await seedGeneration(prisma);
+    const generationId = await seedGeneration(prisma, {
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      reasoningEnabled: true,
+    });
     const provider = FakeLlmProvider.attempts([
       [{ error: 'RATE_LIMITED', retryableBeforeFirstDelta: true }],
       [
@@ -92,6 +96,7 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
     ]);
     expect(generation.usageRecords[0]).toMatchObject({ totalTokens: 12 });
     expect(provider.requests).toHaveLength(2);
+    expect(provider.requests[0]?.reasoning).toMatchObject({ enabled: true });
     expect(provider.requests[0]?.userId).not.toContain('@');
   });
 
@@ -389,7 +394,11 @@ describe('Worker 阶段 4 Generation 状态机（集成）', () => {
 
 async function seedGeneration(
   prisma: PrismaClient,
-  configuration: { provider: string; model: string } = {
+  configuration: {
+    provider: string;
+    model: string;
+    reasoningEnabled?: boolean;
+  } = {
     provider: 'deepseek',
     model: 'deepseek-v4-flash',
   },
@@ -433,6 +442,7 @@ async function seedGeneration(
       responseMessageId: responseMessage.id,
       provider: configuration.provider,
       model: configuration.model,
+      reasoningEnabled: configuration.reasoningEnabled ?? false,
       idempotencyKey: randomUUID(),
       requestHash: 'a'.repeat(64),
     },

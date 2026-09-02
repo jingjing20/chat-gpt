@@ -159,6 +159,7 @@ export type GenerationStatus = z.infer<typeof generationStatusSchema>;
 export const createGenerationRequestSchema = z.object({
   content: z.string().trim().min(1).max(20_000),
   clientMessageId: z.string().uuid(),
+  reasoningEnabled: z.boolean().default(false),
 });
 
 export const createConversationGenerationRequestSchema =
@@ -173,6 +174,7 @@ export const generationResponseSchema = z.object({
   responseMessageId: z.string().uuid(),
   provider: z.string(),
   model: z.string(),
+  reasoningEnabled: z.boolean(),
   status: generationStatusSchema,
   lastSequence: z.number().int().nonnegative(),
   finishReason: z.string().nullable(),

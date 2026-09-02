@@ -81,6 +81,7 @@ describe('API 阶段 4 Generation（端到端）', () => {
         content: '解释可靠任务队列',
         model: 'client-must-not-override-config',
         clientMessageId: randomUUID(),
+        reasoningEnabled: true,
       })
       .expect(202);
     const body = createGenerationResponseSchema.parse(response.body);
@@ -91,6 +92,17 @@ describe('API 阶段 4 Generation（端到端）', () => {
     });
     expect(body.generation.status).toBe('QUEUED');
     expect(body.generation.model).toBe('configured-test-model');
+    expect(body.generation).toMatchObject({
+      reasoningEnabled: true,
+    });
+    await expect(
+      prisma.generation.findUniqueOrThrow({
+        where: { id: body.generation.id },
+        select: { reasoningEnabled: true },
+      }),
+    ).resolves.toEqual({
+      reasoningEnabled: true,
+    });
     expect(await prisma.generation.count()).toBe(1);
     expect(await prisma.outboxEvent.count()).toBe(1);
   });
@@ -371,7 +383,11 @@ describe('API 阶段 4 Generation（端到端）', () => {
       .post(`/api/v1/conversations/${conversationId}/generations`)
       .set('x-csrf-token', ownerCsrf)
       .set('Idempotency-Key', randomUUID())
-      .send({ content: '请重试这个问题', clientMessageId: randomUUID() })
+      .send({
+        content: '请重试这个问题',
+        clientMessageId: randomUUID(),
+        reasoningEnabled: true,
+      })
       .expect(202);
     const source = createGenerationResponseSchema.parse(created.body);
 
@@ -412,6 +428,7 @@ describe('API 阶段 4 Generation（端到端）', () => {
     );
     expect(repeated.generation.id).toBe(first.generation.id);
     expect(first.userMessage.content).toBe('请重试这个问题');
+    expect(first.generation.reasoningEnabled).toBe(true);
     const messages = await prisma.message.findMany({
       where: { id: { in: [first.userMessage.id, first.assistantMessage.id] } },
     });

@@ -3,6 +3,8 @@
 import {
   createConversationWithGeneration,
   createGenerationOperation,
+  DEFAULT_GENERATION_MODES,
+  type GenerationModes,
   type GenerationOperation,
 } from '@/lib/chat-api';
 import { useGenerationStore } from '@/lib/generation-store';
@@ -11,6 +13,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type FormEvent } from 'react';
 import { ArrowUp } from 'lucide-react';
+import { GenerationModeToggles } from './generation-mode-toggles';
 
 function createTitle(content: string) {
   const compact = content.replace(/\s+/g, ' ').trim();
@@ -19,21 +22,25 @@ function createTitle(content: string) {
 
 export function NewConversationStart() {
   const [content, setContent] = useState('');
+  const [modes, setModes] = useState<GenerationModes>(DEFAULT_GENERATION_MODES);
   const queryClient = useQueryClient();
   const router = useRouter();
   const pendingOperationRef = useRef<{
     message: string;
     operation: GenerationOperation;
+    modes: GenerationModes;
   } | null>(null);
   const startMutation = useMutation({
     mutationFn: async (input: {
       message: string;
       operation: GenerationOperation;
+      modes: GenerationModes;
     }) =>
       createConversationWithGeneration(
         createTitle(input.message),
         input.message,
         input.operation,
+        input.modes,
       ),
     onSuccess: (result) => {
       pendingOperationRef.current = null;
@@ -63,8 +70,9 @@ export function NewConversationStart() {
       pending?.message === message
         ? pending.operation
         : createGenerationOperation();
-    pendingOperationRef.current = { message, operation };
-    startMutation.mutate({ message, operation });
+    const selectedModes = pending?.message === message ? pending.modes : modes;
+    pendingOperationRef.current = { message, operation, modes: selectedModes };
+    startMutation.mutate({ message, operation, modes: selectedModes });
   }
 
   return (
@@ -89,6 +97,11 @@ export function NewConversationStart() {
           placeholder="输入消息…"
           rows={1}
           value={content}
+        />
+        <GenerationModeToggles
+          disabled={startMutation.isPending}
+          modes={modes}
+          onChange={setModes}
         />
         <button
           aria-label="发送消息"

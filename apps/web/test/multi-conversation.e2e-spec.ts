@@ -3,6 +3,40 @@ import { createHash } from 'node:crypto';
 
 const raceIterations = Number(process.env.PHASE_6_RACE_ITERATIONS ?? 20);
 
+test('新对话和已有对话都按深度思考开关提交生成参数', async ({ page }) => {
+  const reasoningValues: boolean[] = [];
+  page.on('request', (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (
+      request.method() === 'POST' &&
+      (pathname.endsWith('/conversations/with-generation') ||
+        pathname.endsWith('/generations'))
+    ) {
+      reasoningValues.push(
+        Boolean(
+          (request.postDataJSON() as { reasoningEnabled?: unknown })
+            .reasoningEnabled,
+        ),
+      );
+    }
+  });
+
+  await register(page);
+  const toggle = page.getByRole('button', { name: '深度思考' });
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await send(page, '开启深度思考创建对话');
+  await page.waitForURL(/\/chat\/[0-9a-f-]{36}$/i);
+
+  const conversationToggle = page.getByRole('button', { name: '深度思考' });
+  await expect(conversationToggle).toHaveAttribute('aria-pressed', 'false');
+  await conversationToggle.click();
+  await send(page, '开启深度思考继续对话');
+
+  await expect.poll(() => reasoningValues).toEqual([true, true]);
+});
+
 test('流式自动跟随不保存滚动位置，用户主动滚动才保存', async ({ page }) => {
   const scrollPositionRequests: number[] = [];
   page.on('request', (request) => {

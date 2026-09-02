@@ -111,9 +111,11 @@ export class OpenAiCompatibleAdapter implements LlmProviderAdapter {
     if (request.maxOutputTokens !== undefined)
       payload.max_tokens = request.maxOutputTokens;
     if (request.userId !== undefined) payload.user_id = request.userId;
-    if (request.reasoning?.enabled) {
-      payload.thinking = { type: 'enabled' };
-      if (request.reasoning.effort !== undefined)
+    if (request.reasoning !== undefined) {
+      payload.thinking = {
+        type: request.reasoning.enabled ? 'enabled' : 'disabled',
+      };
+      if (request.reasoning.enabled && request.reasoning.effort !== undefined)
         payload.reasoning_effort = request.reasoning.effort;
     }
     return payload;

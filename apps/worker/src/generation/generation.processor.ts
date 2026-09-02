@@ -196,7 +196,9 @@ export class GenerationProcessor {
       model: generation.model,
       contextWindow: this.environment.LLM_CONTEXT_WINDOW,
       maxOutputTokens: this.environment.LLM_MAX_OUTPUT_TOKENS,
-      reasoningEnabled: this.environment.LLM_REASONING_MODE === 'enabled',
+      reasoningEnabled:
+        generation.reasoningEnabled &&
+        this.environment.LLM_REASONING_MODE === 'enabled',
     });
     const context = fitMessagesToContextWindow(rawMessages, modelProfile);
     const messages = context.messages;
@@ -365,7 +367,9 @@ export class GenerationProcessor {
             messages,
             maxOutputTokens: modelProfile.maxOutputTokens,
             reasoning: {
-              enabled: this.environment.LLM_REASONING_MODE === 'enabled',
+              enabled:
+                generation.reasoningEnabled &&
+                this.environment.LLM_REASONING_MODE === 'enabled',
               effort: this.environment.LLM_REASONING_EFFORT,
             },
             userId: this.providerUserId(generation.userId),

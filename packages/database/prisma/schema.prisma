@@ -139,6 +139,7 @@ model Generation {
   responseMessageId  String              @unique @map("response_message_id") @db.Uuid
   provider           String              @db.VarChar(50)
   model              String              @db.VarChar(100)
+  reasoningEnabled   Boolean             @default(false) @map("reasoning_enabled")
   status             GenerationStatus    @default(QUEUED)
   lastSequence       BigInt              @default(0) @map("last_sequence")
   checkpointSequence BigInt              @default(0) @map("checkpoint_sequence")

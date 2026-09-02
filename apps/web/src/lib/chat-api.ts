@@ -147,6 +147,7 @@ export async function createGeneration(
   conversationId: string,
   content: string,
   operation: GenerationOperation = createGenerationOperation(),
+  modes: GenerationModes = DEFAULT_GENERATION_MODES,
 ) {
   return createGenerationResponseSchema.parse(
     await apiRequest(`/conversations/${conversationId}/generations`, {
@@ -155,6 +156,7 @@ export async function createGeneration(
       body: JSON.stringify({
         content,
         clientMessageId: operation.clientMessageId,
+        ...modes,
       }),
     }),
   );
@@ -164,6 +166,14 @@ export interface GenerationOperation {
   idempotencyKey: string;
   clientMessageId: string;
 }
+
+export interface GenerationModes {
+  reasoningEnabled: boolean;
+}
+
+export const DEFAULT_GENERATION_MODES: GenerationModes = {
+  reasoningEnabled: false,
+};
 
 export function createGenerationOperation(): GenerationOperation {
   return {
@@ -176,6 +186,7 @@ export async function createConversationWithGeneration(
   title: string,
   content: string,
   operation: GenerationOperation,
+  modes: GenerationModes = DEFAULT_GENERATION_MODES,
 ) {
   return createGenerationResponseSchema.parse(
     await apiRequest('/conversations/with-generation', {
@@ -185,6 +196,7 @@ export async function createConversationWithGeneration(
         title,
         content,
         clientMessageId: operation.clientMessageId,
+        ...modes,
       }),
     }),
   );

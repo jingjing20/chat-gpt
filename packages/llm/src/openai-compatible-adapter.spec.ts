@@ -77,6 +77,42 @@ describe('OpenAiCompatibleAdapter', () => {
     expect(values).toEqual(['[DONE]']);
   });
 
+  it('关闭深度思考时显式发送 disabled 且不发送推理强度', async () => {
+    let capturedInit: RequestInit | undefined;
+    const adapter = new OpenAiCompatibleAdapter({
+      baseUrl: 'https://example.test',
+      apiKey: 'secret',
+      timeoutMs: 1000,
+      fetch: jest.fn((_url, init) => {
+        capturedInit = init;
+        return Promise.resolve(
+          new Response(
+            chunked(
+              'data: {"choices":[{"delta":{"content":"答"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+            ),
+          ),
+        );
+      }),
+    });
+
+    await collect(
+      adapter.streamChat(
+        {
+          model: 'deepseek',
+          messages: [{ role: 'user', content: '你好' }],
+          reasoning: { enabled: false, effort: 'high' },
+        },
+        new AbortController().signal,
+      ),
+    );
+    const requestBody = capturedInit?.body;
+    if (typeof requestBody !== 'string')
+      throw new Error('请求体必须是 JSON 字符串');
+    const body = JSON.parse(requestBody) as Record<string, unknown>;
+    expect(body.thinking).toEqual({ type: 'disabled' });
+    expect(body).not.toHaveProperty('reasoning_effort');
+  });
+
   it('将损坏的 JSON 映射为安全错误', async () => {
     const adapter = new OpenAiCompatibleAdapter({
       baseUrl: 'https://example.test',

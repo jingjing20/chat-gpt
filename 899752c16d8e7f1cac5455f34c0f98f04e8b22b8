@@ -1,0 +1,94 @@
+apps/web/src/components/chat-shell.tsx
+  f84d26b2a33fe916 18,24,57,128-139
+packages/database/prisma/migrations/20260904000100_scheduled_tasks/migration.sql
+  f84d26b2a33fe916 1-22
+apps/web/src/app/chat/[conversationId]/page.tsx
+  f84d26b2a33fe916 5,8,11,13-17
+apps/web/src/components/tasks-layout.spec.tsx
+  f84d26b2a33fe916 1-16
+apps/web/src/components/task-actions.tsx
+  f84d26b2a33fe916 1-229
+docs/adr/0007-conversational-scheduled-tasks.md
+  f84d26b2a33fe916 1-17
+apps/api/src/tasks/tasks-scheduler.service.ts
+  f84d26b2a33fe916 1-19
+apps/web/src/app/globals.css
+  f84d26b2a33fe916 293-295,393-395,397-401,403,408-428,764,1108,1123-1659,2361-2372,2426-2450
+apps/api/src/app.module.ts
+  f84d26b2a33fe916 17,28
+apps/api/src/tasks/tasks.controller.ts
+  f84d26b2a33fe916 1-100
+apps/web/src/lib/query-keys.ts
+  f84d26b2a33fe916 12-15
+apps/web/src/lib/task-questionnaire.spec.tsx
+  f84d26b2a33fe916 1-23
+apps/web/src/components/scheduled-tasks.tsx
+  f84d26b2a33fe916 1-228
+packages/database/prisma/migrations/20260904000200_scheduled_task_editing/migration.sql
+  f84d26b2a33fe916 1-3
+packages/database/prisma/schema.prisma
+  f84d26b2a33fe916 61-71,85,91-101,107-128
+apps/web/src/lib/generation-store.ts
+  f84d26b2a33fe916 105,202-207
+apps/web/src/lib/chat-api.ts
+  f84d26b2a33fe916 11-12,192,203,254-315
+apps/api/src/tasks/tasks.module.ts
+  f84d26b2a33fe916 1-12
+apps/web/src/lib/task-questionnaire.ts
+  f84d26b2a33fe916 1-55
+apps/api/src/tasks/tasks.service.ts
+  f84d26b2a33fe916 1-304
+packages/database/src/index.ts
+  f84d26b2a33fe916 10-11,23
+apps/web/src/app/chat/tasks/page.tsx
+  f84d26b2a33fe916 1-5
+apps/web/src/components/conversation-view.tsx
+  f84d26b2a33fe916 41,50-51,58,61,134-150,152-164,487,494,574-579,600-610
+apps/web/src/components/task-setup-panel.tsx
+  f84d26b2a33fe916 1-139
+apps/api/src/tasks/tasks.service.spec.ts
+  f84d26b2a33fe916 1-163
+apps/api/src/generations/generations.module.ts
+  f84d26b2a33fe916 10
+packages/contracts/src/index.ts
+  f84d26b2a33fe916 168,215-274
+apps/api/src/generations/generations.service.ts
+  f84d26b2a33fe916 35-37,452,483-495
+apps/web/src/components/scheduled-tasks.spec.tsx
+  f84d26b2a33fe916 1-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "bzl_git_version": "0.1.32",
+  "base_commit_sha": "899752c16d8e7f1cac5455f34c0f98f04e8b22b8",
+  "prompts": {
+    "57ad12e10d772f97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04b74-1954-7e02-988e-020da20a7cab",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 55,
+      "total_deletions": 0,
+      "accepted_lines": 55,
+      "overriden_lines": 0
+    },
+    "f84d26b2a33fe916": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06b6c-d78a-7dd1-816d-1312846500ff",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 2902,
+      "total_deletions": 520,
+      "accepted_lines": 2263,
+      "overriden_lines": 0
+    }
+  }
+}

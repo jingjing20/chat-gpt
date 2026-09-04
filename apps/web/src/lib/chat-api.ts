@@ -8,6 +8,8 @@ import {
   generationResponseSchema,
   generationSyncResponseSchema,
   messagePageResponseSchema,
+  scheduledTaskListResponseSchema,
+  scheduledTaskResponseSchema,
   userResponseSchema,
   type ConversationResponse,
 } from '@chat/contracts';
@@ -187,6 +189,7 @@ export async function createConversationWithGeneration(
   content: string,
   operation: GenerationOperation,
   modes: GenerationModes = DEFAULT_GENERATION_MODES,
+  options: { taskQuestionnaire?: boolean } = {},
 ) {
   return createGenerationResponseSchema.parse(
     await apiRequest('/conversations/with-generation', {
@@ -197,6 +200,7 @@ export async function createConversationWithGeneration(
         content,
         clientMessageId: operation.clientMessageId,
         ...modes,
+        ...options,
       }),
     }),
   );
@@ -246,4 +250,66 @@ export async function syncGenerations(knownGenerationIds: string[] = []) {
 
 export function conversationTimestamp(conversation: ConversationResponse) {
   return conversation.lastMessageAt ?? conversation.updatedAt;
+}
+
+export async function listScheduledTasks(
+  status?: 'ACTIVE' | 'PAUSED' | 'COMPLETED',
+) {
+  const suffix = status ? `?status=${status}` : '';
+  return scheduledTaskListResponseSchema.parse(
+    await apiRequest(`/tasks${suffix}`),
+  );
+}
+
+export async function createScheduledTask(input: {
+  conversationId: string;
+  title: string;
+  prompt: string;
+  cadence: 'DAILY' | 'WEEKLY';
+  timeOfDay: string;
+  timezoneOffsetMinutes: number;
+  answers?: Array<{ question: string; answer: string }>;
+}) {
+  return scheduledTaskResponseSchema.parse(
+    await apiRequest('/tasks', { method: 'POST', body: JSON.stringify(input) }),
+  );
+}
+
+export async function updateScheduledTask(
+  taskId: string,
+  input: {
+    title?: string;
+    prompt?: string;
+    cadence?: 'DAILY' | 'WEEKLY';
+    timeOfDay?: string;
+  },
+) {
+  return scheduledTaskResponseSchema.parse(
+    await apiRequest(`/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function deleteScheduledTask(taskId: string) {
+  await apiRequest(`/tasks/${taskId}`, { method: 'DELETE' });
+}
+
+export async function runScheduledTask(taskId: string) {
+  return createGenerationResponseSchema.parse(
+    await apiRequest(`/tasks/${taskId}/run`, { method: 'POST' }),
+  );
+}
+
+export async function updateScheduledTaskStatus(
+  taskId: string,
+  status: 'ACTIVE' | 'PAUSED' | 'COMPLETED',
+) {
+  return scheduledTaskResponseSchema.parse(
+    await apiRequest(`/tasks/${taskId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+  );
 }

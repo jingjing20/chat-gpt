@@ -15,13 +15,13 @@ import {
 } from '@tanstack/react-query';
 import { Menu } from '@base-ui/react/menu';
 import Link from 'next/link';
-import Image from 'next/image';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useGenerationStore } from '@/lib/generation-store';
 import { ConversationNavLink } from './conversation-nav-link';
 import {
   LogOut,
+  Clock3,
   MessageSquarePlus,
   PanelLeftClose,
   PanelLeftOpen,
@@ -54,6 +54,7 @@ function groupConversations(conversations: ConversationResponse[]) {
 
 export function ChatShell({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const params = useParams<{ conversationId?: string }>();
   const queryClient = useQueryClient();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -98,14 +99,6 @@ export function ChatShell({ children }: { children: ReactNode }) {
       <aside className="sidebar">
         <div className="sidebar-heading">
           <Link href="/chat" className="brand-link" title="Lucidra">
-            <Image
-              alt=""
-              className="brand-logo"
-              height={27}
-              priority
-              src="/lucidra-mark.svg"
-              width={27}
-            />
             <span className="brand-name">Lucidra</span>
           </Link>
           <button
@@ -132,6 +125,18 @@ export function ChatShell({ children }: { children: ReactNode }) {
           <MessageSquarePlus aria-hidden="true" size={16} />
           <span>新建对话</span>
         </button>
+        <Link
+          aria-current={pathname === '/chat/tasks' ? 'page' : undefined}
+          className={
+            pathname === '/chat/tasks'
+              ? 'sidebar-primary-link active'
+              : 'sidebar-primary-link'
+          }
+          href="/chat/tasks"
+        >
+          <Clock3 aria-hidden="true" size={18} />
+          <span>定时任务</span>
+        </Link>
         <nav className="conversation-nav" aria-label="对话列表">
           {groupConversations(conversations).map(([label, conversations]) => (
             <section className="conversation-group" key={label}>

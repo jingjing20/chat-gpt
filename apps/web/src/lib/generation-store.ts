@@ -102,6 +102,7 @@ interface GenerationStore {
   ) => void;
   setDraft: (conversationId: string, content: string) => void;
   clearDraft: (conversationId: string) => void;
+  remove: (generationId: string) => void;
   clear: () => void;
   setConnectionStatus: (
     status: 'connecting' | 'connected' | 'disconnected',
@@ -197,6 +198,12 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
       const drafts = { ...store.drafts };
       delete drafts[conversationId];
       return { drafts };
+    }),
+  remove: (generationId) =>
+    set((store) => {
+      const generations = { ...store.generations };
+      delete generations[generationId];
+      return { generations };
     }),
   clear: () =>
     set({ generations: {}, drafts: {}, connectionStatus: 'connecting' }),

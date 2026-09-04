@@ -58,6 +58,17 @@ enum GenerationAttemptStatus {
   CANCELLED
 }
 
+enum ScheduledTaskStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum ScheduledTaskCadence {
+  DAILY
+  WEEKLY
+}
+
 model User {
   id                 String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email              String                  @unique @db.Citext
@@ -71,24 +82,48 @@ model User {
   conversationStates ConversationUserState[]
   messages           Message[]
   generations        Generation[]
+  scheduledTasks     ScheduledTask[]
 
   @@map("users")
 }
 
 model Conversation {
-  id            String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ownerUserId   String                  @map("owner_user_id") @db.Uuid
-  title         String                  @db.VarChar(120)
-  lastMessageAt DateTime?               @map("last_message_at") @db.Timestamptz(3)
-  createdAt     DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
-  owner         User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  userStates    ConversationUserState[]
-  messages      Message[]
-  generations   Generation[]
+  id             String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerUserId    String                  @map("owner_user_id") @db.Uuid
+  title          String                  @db.VarChar(120)
+  lastMessageAt  DateTime?               @map("last_message_at") @db.Timestamptz(3)
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  owner          User                    @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  userStates     ConversationUserState[]
+  messages       Message[]
+  generations    Generation[]
+  scheduledTasks ScheduledTask[]
 
   @@index([ownerUserId, updatedAt(sort: Desc), id(sort: Desc)])
   @@map("conversations")
+}
+
+model ScheduledTask {
+  id                    String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                String               @map("user_id") @db.Uuid
+  conversationId        String               @map("conversation_id") @db.Uuid
+  title                 String               @db.VarChar(120)
+  prompt                String               @db.Text
+  cadence               ScheduledTaskCadence
+  timeOfDay             String               @default("09:00") @map("time_of_day") @db.VarChar(5)
+  timezoneOffsetMinutes Int                  @default(0) @map("timezone_offset_minutes")
+  status                ScheduledTaskStatus  @default(ACTIVE)
+  nextRunAt             DateTime?            @map("next_run_at") @db.Timestamptz(3)
+  lastRunAt             DateTime?            @map("last_run_at") @db.Timestamptz(3)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation          Conversation         @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, nextRunAt])
+  @@index([status, nextRunAt])
+  @@map("scheduled_tasks")
 }
 
 model ConversationUserState {

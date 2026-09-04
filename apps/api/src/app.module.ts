@@ -14,6 +14,7 @@ import { EventsModule } from './events/events.module';
 import { MetricsController } from './observability/metrics.controller';
 import { ObservabilityMiddleware } from './observability/observability.middleware';
 import { MetricsNetworkGuard } from './observability/metrics-network.guard';
+import { TasksModule } from './tasks/tasks.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { MetricsNetworkGuard } from './observability/metrics-network.guard';
     GenerationsModule,
     OutboxModule,
     EventsModule,
+    TasksModule,
   ],
   controllers: [
     HealthController,

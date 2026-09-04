@@ -32,6 +32,9 @@ const ACTIVE_STATUSES = [
   GenerationStatus.CANCEL_REQUESTED,
 ] as const;
 
+const TASK_QUESTIONNAIRE_SYSTEM_PROMPT =
+  '你负责为用户的定时任务目标生成澄清问卷。根据目标本身动态提出 2 到 4 个真正影响执行结果的问题，不得使用固定通用问卷。必须包含运行频率问题，每题提供 2 到 4 个简洁选项。只输出合法 JSON，不输出 Markdown 或解释。格式：{"questions":[{"id":"cadence","question":"问题","options":["选项"]}],"task":{"title":"任务标题","prompt":"结合目标整理出的完整执行提示词","cadence":"DAILY 或 WEEKLY"}}';
+
 @Injectable()
 export class GenerationsService {
   constructor(
@@ -446,6 +449,7 @@ export class GenerationsService {
           content: request.content,
           clientMessageId: request.clientMessageId,
           reasoningEnabled: request.reasoningEnabled,
+          taskQuestionnaire: request.taskQuestionnaire,
         }),
       )
       .digest('hex');
@@ -476,6 +480,19 @@ export class GenerationsService {
             userStates: { create: { userId, lastReadAt: now } },
           },
         });
+        if (request.taskQuestionnaire) {
+          const systemCreatedAt = new Date(now.getTime() - 1);
+          await transaction.message.create({
+            data: {
+              conversationId: conversation.id,
+              role: MessageRole.SYSTEM,
+              status: MessageStatus.COMPLETED,
+              content: TASK_QUESTIONNAIRE_SYSTEM_PROMPT,
+              createdAt: systemCreatedAt,
+              completedAt: systemCreatedAt,
+            },
+          });
+        }
         const userMessage = await transaction.message.create({
           data: {
             id: request.clientMessageId,

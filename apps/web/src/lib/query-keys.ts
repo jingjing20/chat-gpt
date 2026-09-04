@@ -9,4 +9,8 @@ export const queryKeys = {
     messages: (conversationId: string) =>
       ['conversations', 'messages', conversationId] as const,
   },
+  tasks: {
+    all: ['scheduled-tasks'] as const,
+    list: (status?: string) => ['scheduled-tasks', 'list', { status }] as const,
+  },
 };

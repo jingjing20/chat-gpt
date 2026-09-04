@@ -165,6 +165,7 @@ export const createGenerationRequestSchema = z.object({
 export const createConversationGenerationRequestSchema =
   createGenerationRequestSchema.extend({
     title: conversationTitleSchema,
+    taskQuestionnaire: z.boolean().default(false),
   });
 
 export const generationResponseSchema = z.object({
@@ -210,6 +211,66 @@ export type CreateGenerationResponse = z.infer<
   typeof createGenerationResponseSchema
 >;
 export type GenerationJob = z.infer<typeof generationJobSchema>;
+
+export const scheduledTaskStatusSchema = z.enum([
+  'ACTIVE',
+  'PAUSED',
+  'COMPLETED',
+]);
+export const scheduledTaskCadenceSchema = z.enum(['DAILY', 'WEEKLY']);
+export const createScheduledTaskRequestSchema = z.object({
+  conversationId: z.string().uuid(),
+  title: conversationTitleSchema,
+  prompt: z.string().trim().min(1).max(20_000),
+  cadence: scheduledTaskCadenceSchema,
+  timeOfDay: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+    .default('09:00'),
+  timezoneOffsetMinutes: z.number().int().min(-840).max(840).default(0),
+  answers: z
+    .array(
+      z.object({
+        question: z.string().max(500),
+        answer: z.string().max(500),
+      }),
+    )
+    .max(10)
+    .optional(),
+});
+export const updateScheduledTaskRequestSchema = createScheduledTaskRequestSchema
+  .omit({ conversationId: true, answers: true, timezoneOffsetMinutes: true })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0);
+export const updateScheduledTaskStatusRequestSchema = z.object({
+  status: scheduledTaskStatusSchema,
+});
+export const scheduledTaskResponseSchema = z.object({
+  id: z.string().uuid(),
+  conversationId: z.string().uuid(),
+  title: conversationTitleSchema,
+  prompt: z.string(),
+  cadence: scheduledTaskCadenceSchema,
+  timeOfDay: z.string(),
+  timezoneOffsetMinutes: z.number().int(),
+  status: scheduledTaskStatusSchema,
+  nextRunAt: z.string().datetime().nullable(),
+  lastRunAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export const scheduledTaskListResponseSchema = z.object({
+  items: z.array(scheduledTaskResponseSchema),
+});
+export type ScheduledTaskStatus = z.infer<typeof scheduledTaskStatusSchema>;
+export type ScheduledTaskCadence = z.infer<typeof scheduledTaskCadenceSchema>;
+export type CreateScheduledTaskRequest = z.infer<
+  typeof createScheduledTaskRequestSchema
+>;
+export type UpdateScheduledTaskRequest = z.infer<
+  typeof updateScheduledTaskRequestSchema
+>;
+export type ScheduledTaskResponse = z.infer<typeof scheduledTaskResponseSchema>;
 
 export const generationAttemptResponseSchema = z.object({
   id: z.string().uuid(),

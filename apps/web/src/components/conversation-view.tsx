@@ -38,7 +38,7 @@ import {
   useGenerationStore,
 } from '@/lib/generation-store';
 import { useShallow } from 'zustand/react/shallow';
-import { ArrowDown, ArrowUp, Square } from 'lucide-react';
+import { ArrowDown, ArrowUp, ListChecks, Square } from 'lucide-react';
 import { AnswerActions } from './answer-actions';
 import {
   isViewportNearBottom,
@@ -47,14 +47,18 @@ import {
 } from '@/lib/scroll-follow';
 import type { ConversationResponse } from '@chat/contracts';
 import { GenerationModeToggles } from './generation-mode-toggles';
+import { TaskSetupPanel } from './task-setup-panel';
+import { stripLegacyTaskQuestionnaireInstruction } from '@/lib/task-questionnaire';
 
 /**
  * 把服务端消息缓存与当前对话的实时 overlay 合并，仅渲染该对话的生成状态。
  */
 export function ConversationView({
   conversationId,
+  taskSetup,
 }: {
   conversationId: string;
+  taskSetup?: string;
 }) {
   const queryClient = useQueryClient();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -127,8 +131,37 @@ export function ConversationView({
               generationId: overlay.generationId,
             }
           : message;
-      });
+      })
+      .map((message) =>
+        message.role === 'USER'
+          ? {
+              ...message,
+              content: stripLegacyTaskQuestionnaireInstruction(message.content),
+            }
+          : message,
+      )
+      .filter(
+        (message) =>
+          message.role !== 'SYSTEM' &&
+          (message.content ||
+            ['PENDING', 'QUEUED', 'STARTING', 'STREAMING'].includes(
+              message.status,
+            )),
+      );
   }, [messagesQuery.data, overlays]);
+  const questionnaireMessage = taskSetup
+    ? [...messages].reverse().find((message) => message.role === 'ASSISTANT')
+    : undefined;
+  const questionnaireGenerating = Boolean(
+    taskSetup &&
+    (!questionnaireMessage ||
+      ['PENDING', 'QUEUED', 'STARTING', 'STREAMING'].includes(
+        questionnaireMessage.status,
+      )),
+  );
+  const visibleMessages = taskSetup
+    ? messages.filter((message) => message.role === 'USER')
+    : messages;
   const persistScrollPosition = useCallback(
     (scrollOffset: number) => {
       if (persistedScrollOffsetRef.current === scrollOffset) return;
@@ -451,14 +484,14 @@ export function ConversationView({
             {messagesQuery.isFetchingNextPage ? '载入中…' : '载入更早消息'}
           </button>
         ) : null}
-        {messages.length === 0 ? (
+        {visibleMessages.length === 0 ? (
           <div className="message-empty">
             <h2>这是一段空白对话</h2>
             <p>输入内容后，回答会实时显示在这里。</p>
           </div>
         ) : (
           <div className="message-list">
-            {messages.map((message) => (
+            {visibleMessages.map((message) => (
               <article
                 aria-label={message.role === 'USER' ? '你的消息' : '助手回答'}
                 className={`message ${message.role.toLowerCase()}`}
@@ -538,6 +571,12 @@ export function ConversationView({
                 </div>
               </article>
             ))}
+            {questionnaireGenerating ? (
+              <div className="task-question-waiting" aria-live="polite">
+                <ListChecks aria-hidden="true" size={18} />
+                正在根据任务目标生成需要确认的问题…
+              </div>
+            ) : null}
           </div>
         )}
       </div>
@@ -558,6 +597,17 @@ export function ConversationView({
       >
         <ArrowDown aria-hidden="true" size={18} />
       </button>
+      {taskSetup && !questionnaireGenerating ? (
+        <TaskSetupPanel
+          content={questionnaireMessage?.content ?? ''}
+          conversationId={conversationId}
+          generationId={
+            questionnaireMessage && 'generationId' in questionnaireMessage
+              ? questionnaireMessage.generationId
+              : undefined
+          }
+        />
+      ) : null}
       <form className="composer" onSubmit={submit}>
         {composerStatus ? (
           <div className="composer-status" aria-live="polite">

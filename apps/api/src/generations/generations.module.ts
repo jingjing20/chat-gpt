@@ -7,5 +7,6 @@ import { GenerationsService } from './generations.service';
 @Module({
   controllers: [GenerationsController],
   providers: [GenerationsService],
+  exports: [GenerationsService],
 })
 export class GenerationsModule {}

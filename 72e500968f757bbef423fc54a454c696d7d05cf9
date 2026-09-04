@@ -1,0 +1,40 @@
+apps/web/src/components/safe-markdown.spec.tsx
+  f1e1412c848e8ea2 36-46
+apps/web/src/components/safe-markdown.tsx
+  f1e1412c848e8ea2 11-40,99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "bzl_git_version": "0.1.32",
+  "base_commit_sha": "72e500968f757bbef423fc54a454c696d7d05cf9",
+  "prompts": {
+    "57ad12e10d772f97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04b74-1954-7e02-988e-020da20a7cab",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 55,
+      "total_deletions": 0,
+      "accepted_lines": 55,
+      "overriden_lines": 0
+    },
+    "f1e1412c848e8ea2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06207-c0ea-7732-9ea3-11bfbb9d2455",
+        "model": "gpt-5.5",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 43,
+      "total_deletions": 2,
+      "accepted_lines": 42,
+      "overriden_lines": 0
+    }
+  }
+}

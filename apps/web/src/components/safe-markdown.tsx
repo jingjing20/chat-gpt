@@ -8,6 +8,36 @@ import remarkGfm from 'remark-gfm';
 import { MermaidDiagram } from './mermaid-diagram';
 import { CodeBlock } from './code-block';
 
+type MarkdownNode = {
+  children?: MarkdownNode[];
+  type?: string;
+  value?: string;
+};
+
+function remarkSoftBreaks() {
+  return (tree: MarkdownNode) => {
+    replaceTextSoftBreaks(tree);
+  };
+}
+
+function replaceTextSoftBreaks(node: MarkdownNode) {
+  if (!node.children) return;
+
+  node.children = node.children.flatMap((child) => {
+    if (child.type !== 'text' || !child.value?.includes('\n')) {
+      replaceTextSoftBreaks(child);
+      return [child];
+    }
+
+    return child.value.split('\n').flatMap((value, index) => {
+      const nodes: MarkdownNode[] = [];
+      if (index > 0) nodes.push({ type: 'break' });
+      if (value) nodes.push({ ...child, value });
+      return nodes;
+    });
+  });
+}
+
 const sanitizeSchema = {
   ...defaultSchema,
   attributes: {
@@ -66,7 +96,7 @@ export function SafeMarkdown({ content }: { content: string }) {
           [rehypeHighlight, { detect: false, exclude: ['mermaid'] }],
           [rehypeSanitize, sanitizeSchema],
         ]}
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkSoftBreaks]}
         skipHtml
       >
         {content}

@@ -33,3 +33,14 @@ test('支持 GFM 表格、代码高亮和 Mermaid 代码块', () => {
   assert.match(html, /class="hljs-keyword"/);
   assert.match(html, /正在绘制流程图/);
 });
+
+test('普通文本中的单换行会渲染为可见换行', () => {
+  const html = renderToStaticMarkup(
+    <SafeMarkdown content={'**知识问答**：解答问题\n**写作辅助**：帮你写文章'} />,
+  );
+
+  assert.match(
+    html,
+    /<strong>知识问答<\/strong>：解答问题<br\/>\s*<strong>写作辅助<\/strong>：帮你写文章/,
+  );
+});

@@ -1,0 +1,74 @@
+apps/api/src/tasks/tasks.controller.ts
+  f84d26b2a33fe916 81-85
+apps/web/src/components/scheduled-tasks.tsx
+  f84d26b2a33fe916 51-55,189,192
+apps/api/src/generations/generations.service.ts
+  f84d26b2a33fe916 16,39-48,65,67,123,128-135,253-257,310,315-325,387,396-404,490,501-509,581,586-593,622-646
+docs/adr/0007-conversational-scheduled-tasks.md
+  f84d26b2a33fe916 11-13,19-20
+apps/worker/src/generation/zombie-generation-monitor.service.ts
+  f84d26b2a33fe916 8,129-146,157-166
+apps/web/src/components/task-actions.tsx
+  f84d26b2a33fe916 5,12,16-17,33,38-42,99-108,153-162,178-227
+apps/api/src/tasks/tasks.service.spec.ts
+  f84d26b2a33fe916 89-109,117,156-163,168-169,172,178-181,186,190,192-223,238
+packages/database/src/index.ts
+  f84d26b2a33fe916 11,13,26
+apps/web/src/lib/query-keys.ts
+  f84d26b2a33fe916 15
+apps/api/src/tasks/tasks.service.ts
+  f84d26b2a33fe916 11,13,210-212,217-226,241-260,274-276,279-286,292-300,302-304,306-345,351,372-390
+packages/database/prisma/schema.prisma
+  f84d26b2a33fe916 72-84,99,105-117,124-141,145,149-170,220,244
+apps/web/src/app/globals.css
+  f84d26b2a33fe916 1394-1445,1471-1544
+apps/web/src/components/generation-manager.tsx
+  f84d26b2a33fe916 9-29,35,37,163-187,220-260
+apps/web/src/lib/chat-api.ts
+  f84d26b2a33fe916 12,306-311
+apps/worker/src/generation/generation.processor.spec.ts
+  f84d26b2a33fe916 35-69
+packages/contracts/src/index.ts
+  f84d26b2a33fe916 251,266-279,289-291
+packages/database/prisma/migrations/20260904000300_scheduled_task_runs/migration.sql
+  f84d26b2a33fe916 1-36
+apps/web/src/components/scheduled-tasks.spec.tsx
+  f84d26b2a33fe916 30-43
+apps/worker/src/generation/generation.processor.ts
+  f84d26b2a33fe916 10,104-107,198-199,627-628,630-641,739-744,773,816-821,851,910-915,940-943,953-983
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "bzl_git_version": "0.1.32",
+  "base_commit_sha": "78a67a7b338ce6efc53c37341de1b43ab5310614",
+  "prompts": {
+    "57ad12e10d772f97": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04b74-1954-7e02-988e-020da20a7cab",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 55,
+      "total_deletions": 0,
+      "accepted_lines": 55,
+      "overriden_lines": 0
+    },
+    "f84d26b2a33fe916": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06b6c-d78a-7dd1-816d-1312846500ff",
+        "model": "gpt-5.6-sol",
+        "ide": "codex-desktop"
+      },
+      "human_author": "wangzhihao",
+      "messages": [],
+      "total_additions": 957,
+      "total_deletions": 115,
+      "accepted_lines": 957,
+      "overriden_lines": 0
+    }
+  }
+}

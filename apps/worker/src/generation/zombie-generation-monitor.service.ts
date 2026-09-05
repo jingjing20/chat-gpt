@@ -5,6 +5,7 @@ import {
   GenerationAttemptStatus,
   GenerationStatus,
   MessageStatus,
+  ScheduledTaskRunStatus,
 } from '@chat/database';
 import {
   Inject,
@@ -125,6 +126,24 @@ export class ZombieGenerationMonitorService
               },
               data: { hasUnread: true },
             });
+            const taskRun = await transaction.scheduledTaskRun.findUnique({
+              where: { generationId: generation.id },
+              select: {
+                id: true,
+                taskId: true,
+                trigger: true,
+                task: { select: { title: true } },
+              },
+            });
+            if (taskRun) {
+              await transaction.scheduledTaskRun.update({
+                where: { id: taskRun.id },
+                data: {
+                  status: ScheduledTaskRunStatus.FAILED,
+                  completedAt: now,
+                },
+              });
+            }
             await enqueueTerminalEvent(transaction, {
               userId: generation.userId,
               conversationId: generation.conversationId,
@@ -135,6 +154,16 @@ export class ZombieGenerationMonitorService
                 code: 'WORKER_LOST',
                 retryable: false,
                 safeMessage: '生成进程意外中断，已保留收到的部分内容',
+                ...(taskRun
+                  ? {
+                      scheduledTask: {
+                        runId: taskRun.id,
+                        taskId: taskRun.taskId,
+                        title: taskRun.task.title,
+                        trigger: taskRun.trigger,
+                      },
+                    }
+                  : {}),
               },
               content: generation.responseMessage.content,
               reasoningContent: generation.responseMessage.reasoningContent,

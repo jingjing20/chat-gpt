@@ -48,6 +48,11 @@ function formatRun(value: string | null) {
   return `下次运行 ${new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))}`;
 }
 
+function formatLastRun(value: string | null) {
+  if (!value) return null;
+  return `上次运行 ${new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))}`;
+}
+
 export function ScheduledTasks() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -181,10 +186,10 @@ export function ScheduledTasks() {
                 <h3>{task.title}</h3>
                 <p>
                   {task.status === 'PAUSED'
-                    ? `已暂停 · ${task.lastRunAt ? '上次运行已有记录' : '尚未运行'}`
+                    ? `已暂停${formatLastRun(task.lastRunAt) ? ` · ${formatLastRun(task.lastRunAt)}` : ''}`
                     : task.status === 'COMPLETED'
                       ? '已完成'
-                      : formatRun(task.nextRunAt)}
+                      : `${formatRun(task.nextRunAt)}${formatLastRun(task.lastRunAt) ? ` · ${formatLastRun(task.lastRunAt)}` : ''}`}
                 </p>
               </div>
               <TaskActions task={task} />

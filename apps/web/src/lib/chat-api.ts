@@ -9,6 +9,7 @@ import {
   generationSyncResponseSchema,
   messagePageResponseSchema,
   scheduledTaskListResponseSchema,
+  scheduledTaskRunListResponseSchema,
   scheduledTaskResponseSchema,
   userResponseSchema,
   type ConversationResponse,
@@ -299,6 +300,12 @@ export async function deleteScheduledTask(taskId: string) {
 export async function runScheduledTask(taskId: string) {
   return createGenerationResponseSchema.parse(
     await apiRequest(`/tasks/${taskId}/run`, { method: 'POST' }),
+  );
+}
+
+export async function listScheduledTaskRuns(taskId: string) {
+  return scheduledTaskRunListResponseSchema.parse(
+    await apiRequest(`/tasks/${taskId}/runs`),
   );
 }
 

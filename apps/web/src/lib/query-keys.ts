@@ -12,5 +12,6 @@ export const queryKeys = {
   tasks: {
     all: ['scheduled-tasks'] as const,
     list: (status?: string) => ['scheduled-tasks', 'list', { status }] as const,
+    runs: (taskId: string) => ['scheduled-tasks', taskId, 'runs'] as const,
   },
 };

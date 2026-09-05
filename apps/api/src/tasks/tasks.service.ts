@@ -8,7 +8,9 @@ import {
   MessageRole,
   MessageStatus,
   ScheduledTaskCadence,
+  ScheduledTaskRunStatus,
   ScheduledTaskStatus,
+  ScheduledTaskTrigger,
 } from '@chat/database';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
@@ -205,12 +207,21 @@ export class TasksService {
     const result = await this.startTaskRun(
       task,
       `task-run:${task.id}:${randomUUID()}`,
+      ScheduledTaskTrigger.MANUAL,
+      null,
+      true,
     );
-    await this.prisma.scheduledTask.update({
-      where: { id: task.id },
-      data: { lastRunAt: new Date() },
-    });
     return result;
+  }
+
+  async listRuns(userId: string, taskId: string) {
+    await this.findScoped(userId, taskId);
+    const runs = await this.prisma.scheduledTaskRun.findMany({
+      where: { taskId, userId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    return { items: runs.map((run) => this.toRunResponse(run)) };
   }
 
   async dispatchDue(now = new Date()) {
@@ -227,6 +238,26 @@ export class TasksService {
         task.timeOfDay,
         task.timezoneOffsetMinutes,
       );
+      const activeRun = await this.prisma.scheduledTaskRun.findFirst({
+        where: {
+          taskId: task.id,
+          status: {
+            in: [ScheduledTaskRunStatus.QUEUED, ScheduledTaskRunStatus.RUNNING],
+          },
+        },
+        select: { id: true },
+      });
+      if (activeRun) {
+        await this.prisma.scheduledTask.updateMany({
+          where: {
+            id: task.id,
+            status: ScheduledTaskStatus.ACTIVE,
+            nextRunAt: scheduledFor,
+          },
+          data: { nextRunAt },
+        });
+        continue;
+      }
       const claimed = await this.prisma.scheduledTask.updateMany({
         where: {
           id: task.id,
@@ -240,34 +271,84 @@ export class TasksService {
         await this.startTaskRun(
           task,
           `scheduled:${task.id}:${scheduledFor.toISOString()}`,
+          ScheduledTaskTrigger.SCHEDULED,
+          scheduledFor,
+          false,
         );
       } catch {
+        await this.prisma.scheduledTask.updateMany({
+          where: {
+            id: task.id,
+            status: ScheduledTaskStatus.ACTIVE,
+            nextRunAt,
+          },
+          data: { nextRunAt: scheduledFor, lastRunAt: task.lastRunAt },
+        });
         this.logger.error(`定时任务入队失败 taskId=${task.id}`);
       }
     }
   }
 
-  /** 每次执行都创建独立对话，避免将周期结果混入任务设置对话。 */
-  private startTaskRun(
-    task: { id: string; userId: string; title: string; prompt: string },
+  /** 手动触发创建新对话；定时触发复用可用的当前执行对话。 */
+  private async startTaskRun(
+    task: {
+      id: string;
+      userId: string;
+      title: string;
+      prompt: string;
+      executionConversationId: string | null;
+    },
     idempotencyKey: string,
+    trigger: ScheduledTaskTrigger,
+    scheduledFor: Date | null,
+    forceNewConversation: boolean,
   ) {
-    return this.generations.createConversationWithGeneration(
-      task.userId,
-      idempotencyKey,
-      {
-        title: task.title,
-        content: task.prompt,
-        clientMessageId: randomUUID(),
-        reasoningEnabled: false,
-        taskQuestionnaire: false,
-      },
-    );
+    let conversationId = forceNewConversation
+      ? null
+      : task.executionConversationId;
+    if (conversationId) {
+      const state = await this.prisma.conversationUserState.findUnique({
+        where: {
+          conversationId_userId: { conversationId, userId: task.userId },
+        },
+        select: { archivedAt: true },
+      });
+      if (!state || state.archivedAt) conversationId = null;
+    }
+    const request = {
+      content: task.prompt,
+      clientMessageId: randomUUID(),
+      reasoningEnabled: false,
+    };
+    const options = {
+      isolatedContext: true,
+      scheduledTaskRun: { taskId: task.id, trigger, scheduledFor },
+    };
+    const result = conversationId
+      ? await this.generations.create(
+          task.userId,
+          conversationId,
+          idempotencyKey,
+          request,
+          options,
+        )
+      : await this.generations.createConversationWithGeneration(
+          task.userId,
+          idempotencyKey,
+          {
+            ...request,
+            title: task.title,
+            taskQuestionnaire: false,
+          },
+          options,
+        );
+    return result;
   }
 
   private toResponse(task: {
     id: string;
     conversationId: string;
+    executionConversationId: string | null;
     title: string;
     prompt: string;
     cadence: ScheduledTaskCadence;
@@ -285,6 +366,25 @@ export class TasksService {
       lastRunAt: task.lastRunAt?.toISOString() ?? null,
       createdAt: task.createdAt.toISOString(),
       updatedAt: task.updatedAt.toISOString(),
+    };
+  }
+
+  private toRunResponse(run: {
+    id: string;
+    taskId: string;
+    conversationId: string;
+    generationId: string;
+    trigger: ScheduledTaskTrigger;
+    status: ScheduledTaskRunStatus;
+    scheduledFor: Date | null;
+    createdAt: Date;
+    completedAt: Date | null;
+  }) {
+    return {
+      ...run,
+      scheduledFor: run.scheduledFor?.toISOString() ?? null,
+      createdAt: run.createdAt.toISOString(),
+      completedAt: run.completedAt?.toISOString() ?? null,
     };
   }
 

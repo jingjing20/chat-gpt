@@ -13,6 +13,7 @@ import {
   MessageRole,
   MessageStatus,
   Prisma,
+  ScheduledTaskTrigger,
 } from '@chat/database';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
@@ -35,6 +36,16 @@ const ACTIVE_STATUSES = [
 const TASK_QUESTIONNAIRE_SYSTEM_PROMPT =
   '你负责为用户的定时任务目标生成澄清问卷。根据目标本身动态提出 2 到 4 个真正影响执行结果的问题，不得使用固定通用问卷。必须包含运行频率问题，每题提供 2 到 4 个简洁选项。只输出合法 JSON，不输出 Markdown 或解释。格式：{"questions":[{"id":"cadence","question":"问题","options":["选项"]}],"task":{"title":"任务标题","prompt":"结合目标整理出的完整执行提示词","cadence":"DAILY 或 WEEKLY"}}';
 
+export interface GenerationCreationOptions {
+  /** 仅将本次请求消息作为模型上下文，定时任务复用对话时用于隔离历史结果。 */
+  isolatedContext?: boolean;
+  scheduledTaskRun?: {
+    taskId: string;
+    trigger: ScheduledTaskTrigger;
+    scheduledFor: Date | null;
+  };
+}
+
 @Injectable()
 export class GenerationsService {
   constructor(
@@ -51,8 +62,9 @@ export class GenerationsService {
     conversationId: string,
     idempotencyKey: string,
     request: CreateGenerationRequest,
+    options: GenerationCreationOptions = {},
   ): Promise<CreateGenerationResponse> {
-    const requestHash = this.hashRequest(conversationId, request);
+    const requestHash = this.hashRequest(conversationId, request, options);
     const existing = await this.findByIdempotencyKey(userId, idempotencyKey);
     if (existing) return this.resolveExisting(existing, requestHash);
 
@@ -108,10 +120,19 @@ export class GenerationsService {
             provider: this.environment.LLM_PROVIDER,
             model: this.environment.LLM_DEFAULT_MODEL,
             reasoningEnabled: request.reasoningEnabled,
+            isolatedContext: options.isolatedContext ?? false,
             idempotencyKey,
             requestHash,
           },
         });
+        await this.attachScheduledTaskRun(
+          transaction,
+          options,
+          userId,
+          conversationId,
+          generation.id,
+          now,
+        );
         await transaction.conversation.update({
           where: { id: conversationId },
           data: { lastMessageAt: now },
@@ -229,7 +250,11 @@ export class GenerationsService {
         `;
         const source = await transaction.generation.findFirst({
           where: { id: sourceGenerationId, userId },
-          include: { requestMessage: true, responseMessage: true },
+          include: {
+            requestMessage: true,
+            responseMessage: true,
+            scheduledTaskRun: true,
+          },
         });
         if (!source) this.notFound('Generation 不存在');
         if (
@@ -282,10 +307,22 @@ export class GenerationsService {
             provider: this.environment.LLM_PROVIDER,
             model: this.environment.LLM_DEFAULT_MODEL,
             reasoningEnabled: source.reasoningEnabled,
+            isolatedContext: source.isolatedContext,
             idempotencyKey,
             requestHash,
           },
         });
+        if (source.scheduledTaskRun) {
+          await transaction.scheduledTaskRun.create({
+            data: {
+              taskId: source.scheduledTaskRun.taskId,
+              userId,
+              conversationId: source.conversationId,
+              generationId: generation.id,
+              trigger: source.scheduledTaskRun.trigger,
+            },
+          });
+        }
         await transaction.conversation.update({
           where: { id: source.conversationId },
           data: { lastMessageAt: now },
@@ -347,6 +384,7 @@ export class GenerationsService {
   private hashRequest(
     conversationId: string,
     request: CreateGenerationRequest,
+    options: GenerationCreationOptions,
   ): string {
     return createHash('sha256')
       .update(
@@ -355,6 +393,15 @@ export class GenerationsService {
           clientMessageId: request.clientMessageId,
           content: request.content,
           reasoningEnabled: request.reasoningEnabled,
+          isolatedContext: options.isolatedContext ?? false,
+          scheduledTaskRun: options.scheduledTaskRun
+            ? {
+                taskId: options.scheduledTaskRun.taskId,
+                trigger: options.scheduledTaskRun.trigger,
+                scheduledFor:
+                  options.scheduledTaskRun.scheduledFor?.toISOString() ?? null,
+              }
+            : null,
         }),
       )
       .digest('hex');
@@ -440,6 +487,7 @@ export class GenerationsService {
     userId: string,
     idempotencyKey: string,
     request: CreateConversationGenerationRequest,
+    options: GenerationCreationOptions = {},
   ): Promise<CreateGenerationResponse> {
     const requestHash = createHash('sha256')
       .update(
@@ -450,6 +498,15 @@ export class GenerationsService {
           clientMessageId: request.clientMessageId,
           reasoningEnabled: request.reasoningEnabled,
           taskQuestionnaire: request.taskQuestionnaire,
+          isolatedContext: options.isolatedContext ?? false,
+          scheduledTaskRun: options.scheduledTaskRun
+            ? {
+                taskId: options.scheduledTaskRun.taskId,
+                trigger: options.scheduledTaskRun.trigger,
+                scheduledFor:
+                  options.scheduledTaskRun.scheduledFor?.toISOString() ?? null,
+              }
+            : null,
         }),
       )
       .digest('hex');
@@ -521,10 +578,19 @@ export class GenerationsService {
             provider: this.environment.LLM_PROVIDER,
             model: this.environment.LLM_DEFAULT_MODEL,
             reasoningEnabled: request.reasoningEnabled,
+            isolatedContext: options.isolatedContext ?? false,
             idempotencyKey,
             requestHash,
           },
         });
+        await this.attachScheduledTaskRun(
+          transaction,
+          options,
+          userId,
+          conversation.id,
+          generation.id,
+          now,
+        );
         await transaction.outboxEvent.create({
           data: {
             aggregateType: 'generation',
@@ -552,5 +618,30 @@ export class GenerationsService {
       }
       throw error;
     }
+  }
+
+  private async attachScheduledTaskRun(
+    transaction: Prisma.TransactionClient,
+    options: GenerationCreationOptions,
+    userId: string,
+    conversationId: string,
+    generationId: string,
+    now: Date,
+  ) {
+    if (!options.scheduledTaskRun) return;
+    await transaction.scheduledTask.update({
+      where: { id: options.scheduledTaskRun.taskId },
+      data: { executionConversationId: conversationId, lastRunAt: now },
+    });
+    await transaction.scheduledTaskRun.create({
+      data: {
+        taskId: options.scheduledTaskRun.taskId,
+        userId,
+        conversationId,
+        generationId,
+        trigger: options.scheduledTaskRun.trigger,
+        scheduledFor: options.scheduledTaskRun.scheduledFor,
+      },
+    });
   }
 }

@@ -27,4 +27,18 @@ test('立即运行后注册生成状态并跳转到新对话', () => {
     source,
     /router\.push\(`\/chat\/\$\{result\.conversation\.id\}`\)/,
   );
+  assert.match(source, /查看最近结果/);
+});
+
+test('后台任务终态会显示可跳转的站内通知', () => {
+  const source = readFileSync(
+    resolve(process.cwd(), 'src/components/generation-manager.tsx'),
+    'utf8',
+  );
+  assert.match(source, /scheduledTaskFromEvent/);
+  assert.match(source, /className="task-notifications"/);
+  assert.match(
+    source,
+    /router\.push\(`\/chat\/\$\{notification\.conversationId\}`\)/,
+  );
 });

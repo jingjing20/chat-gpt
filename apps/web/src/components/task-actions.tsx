@@ -2,16 +2,19 @@
 
 import {
   deleteScheduledTask,
+  listScheduledTaskRuns,
   runScheduledTask,
   updateScheduledTask,
   updateScheduledTaskStatus,
 } from '@/lib/chat-api';
 import { useGenerationStore } from '@/lib/generation-store';
 import { queryKeys } from '@/lib/query-keys';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ScheduledTaskResponse } from '@chat/contracts';
 import {
   MoreHorizontal,
+  MessageSquareText,
+  History,
   Pause,
   Pencil,
   Play,
@@ -27,10 +30,16 @@ export function TaskActions({ task }: { task: ScheduledTaskResponse }) {
   const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [prompt, setPrompt] = useState(task.prompt);
   const [cadence, setCadence] = useState(task.cadence);
   const [timeOfDay, setTimeOfDay] = useState(task.timeOfDay);
+  const runsQuery = useQuery({
+    queryKey: queryKeys.tasks.runs(task.id),
+    queryFn: () => listScheduledTaskRuns(task.id),
+    enabled: historyOpen,
+  });
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
   const runMutation = useMutation({
@@ -87,6 +96,16 @@ export function TaskActions({ task }: { task: ScheduledTaskResponse }) {
   }
   return (
     <div className="task-actions">
+      {task.executionConversationId ? (
+        <button
+          aria-label={`查看任务结果：${task.title}`}
+          onClick={() => router.push(`/chat/${task.executionConversationId}`)}
+          title="查看最近结果"
+          type="button"
+        >
+          <MessageSquareText aria-hidden="true" size={18} />
+        </button>
+      ) : null}
       <button
         aria-label={`编辑任务：${task.title}`}
         onClick={() => setEditing(true)}
@@ -132,6 +151,16 @@ export function TaskActions({ task }: { task: ScheduledTaskResponse }) {
             </button>
           ) : null}
           <button
+            onClick={() => {
+              setHistoryOpen(true);
+              setMenuOpen(false);
+            }}
+            type="button"
+          >
+            <History aria-hidden="true" size={17} />
+            运行记录
+          </button>
+          <button
             className="danger"
             disabled={deleteMutation.isPending}
             onClick={() => {
@@ -144,6 +173,56 @@ export function TaskActions({ task }: { task: ScheduledTaskResponse }) {
             <Trash2 aria-hidden="true" size={17} />
             删除
           </button>
+        </div>
+      ) : null}
+      {historyOpen ? (
+        <div className="task-edit-backdrop" role="presentation">
+          <section
+            aria-label="定时任务运行记录"
+            className="task-history-dialog"
+          >
+            <header>
+              <div>
+                <span>运行记录</span>
+                <h2>{task.title}</h2>
+              </div>
+              <button
+                aria-label="关闭运行记录"
+                onClick={() => setHistoryOpen(false)}
+                type="button"
+              >
+                <X aria-hidden="true" size={22} />
+              </button>
+            </header>
+            <div className="task-history-list">
+              {runsQuery.isPending ? <p>正在加载…</p> : null}
+              {runsQuery.isError ? <p>运行记录加载失败。</p> : null}
+              {runsQuery.data?.items.length === 0 ? (
+                <p>暂无运行记录。</p>
+              ) : null}
+              {runsQuery.data?.items.map((run) => (
+                <button
+                  key={run.id}
+                  onClick={() => router.push(`/chat/${run.conversationId}`)}
+                  type="button"
+                >
+                  <span>
+                    {run.trigger === 'MANUAL' ? '立即执行' : '定时触发'}
+                  </span>
+                  <strong>
+                    {run.status === 'COMPLETED'
+                      ? '已完成'
+                      : run.status === 'FAILED'
+                        ? '执行失败'
+                        : run.status === 'CANCELLED'
+                          ? '已取消'
+                          : '执行中'}
+                  </strong>
+                  <time>{new Date(run.createdAt).toLocaleString('zh-CN')}</time>
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
       ) : null}
       {editing ? (

@@ -78,6 +78,11 @@ export class TasksController {
     return this.tasks.runNow(request.auth!.userId, this.id(taskId));
   }
 
+  @Get(':taskId/runs')
+  runs(@Req() request: Request, @Param('taskId') taskId: string) {
+    return this.tasks.listRuns(request.auth!.userId, this.id(taskId));
+  }
+
   @Delete(':taskId')
   @HttpCode(204)
   async delete(@Req() request: Request, @Param('taskId') taskId: string) {

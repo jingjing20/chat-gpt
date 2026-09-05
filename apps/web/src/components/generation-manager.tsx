@@ -6,13 +6,35 @@ import { queryKeys } from '@/lib/query-keys';
 import { SseParser } from '@/lib/sse-parser';
 import { userEventSchema, type UserEvent } from '@chat/contracts';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { CheckCircle2, CircleAlert, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+
+interface TaskNotification {
+  id: string;
+  conversationId: string;
+  title: string;
+  status: 'COMPLETED' | 'FAILED' | 'CANCELLED';
+}
+
+function scheduledTaskFromEvent(event: UserEvent) {
+  const value = event.payload.scheduledTask;
+  if (!value || typeof value !== 'object') return null;
+  const task = value as Record<string, unknown>;
+  if (typeof task.taskId !== 'string' || typeof task.title !== 'string') {
+    return null;
+  }
+  if (task.trigger !== 'MANUAL' && task.trigger !== 'SCHEDULED') return null;
+  return { taskId: task.taskId, title: task.title, trigger: task.trigger };
+}
 
 /**
  * 在路由之上维护用户级 SSE，并把所有对话的 generation 事件归并到全局 store。
  */
 export function GenerationManager({ userId }: { userId: string }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const [notifications, setNotifications] = useState<TaskNotification[]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -138,6 +160,31 @@ export function GenerationManager({ userId }: { userId: string }) {
               event.type === 'generation.failed' ||
               event.type === 'generation.cancelled'
             ) {
+              const scheduledTask = scheduledTaskFromEvent(event);
+              if (
+                result === 'applied' &&
+                scheduledTask?.trigger === 'SCHEDULED'
+              ) {
+                const status: TaskNotification['status'] =
+                  event.type === 'generation.completed'
+                    ? 'COMPLETED'
+                    : event.type === 'generation.failed'
+                      ? 'FAILED'
+                      : 'CANCELLED';
+                setNotifications((current) =>
+                  [
+                    ...current.filter(
+                      (notification) => notification.id !== event.generationId,
+                    ),
+                    {
+                      id: event.generationId,
+                      conversationId: event.conversationId,
+                      title: scheduledTask.title,
+                      status,
+                    },
+                  ].slice(-3),
+                );
+              }
               await Promise.all([
                 queryClient.invalidateQueries({
                   queryKey: queryKeys.conversations.messages(
@@ -170,5 +217,45 @@ export function GenerationManager({ userId }: { userId: string }) {
     };
   }, [queryClient, userId]);
 
-  return null;
+  if (notifications.length === 0) return null;
+  return (
+    <aside className="task-notifications" aria-live="polite">
+      {notifications.map((notification) => (
+        <div className="task-notification" key={notification.id}>
+          {notification.status === 'COMPLETED' ? (
+            <CheckCircle2 aria-hidden="true" size={19} />
+          ) : (
+            <CircleAlert aria-hidden="true" size={19} />
+          )}
+          <div>
+            <strong>{notification.title}</strong>
+            <span>
+              {notification.status === 'COMPLETED'
+                ? '定时任务已完成'
+                : notification.status === 'FAILED'
+                  ? '定时任务执行失败'
+                  : '定时任务已取消'}
+            </span>
+          </div>
+          <button
+            onClick={() => router.push(`/chat/${notification.conversationId}`)}
+            type="button"
+          >
+            查看
+          </button>
+          <button
+            aria-label="关闭通知"
+            onClick={() =>
+              setNotifications((current) =>
+                current.filter((item) => item.id !== notification.id),
+              )
+            }
+            type="button"
+          >
+            <X aria-hidden="true" size={16} />
+          </button>
+        </div>
+      ))}
+    </aside>
+  );
 }

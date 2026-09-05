@@ -32,3 +32,38 @@ describe('GenerationProcessor 数据库短暂故障恢复', () => {
     expect(operation).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('GenerationProcessor 定时任务上下文隔离', () => {
+  it('复用执行对话时只把本次任务消息发给模型', async () => {
+    const findUniqueOrThrow = jest.fn().mockResolvedValue({
+      role: 'USER',
+      content: '本次任务提示词',
+    });
+    const findMany = jest.fn();
+    const isolated = Object.create(GenerationProcessor.prototype) as {
+      prisma: {
+        message: {
+          findUniqueOrThrow: typeof findUniqueOrThrow;
+          findMany: typeof findMany;
+        };
+      };
+      loadContext(
+        conversationId: string,
+        responseMessageId: string,
+        requestMessageId: string,
+        isolatedContext: boolean,
+      ): Promise<Array<{ role: string; content: string }>>;
+    };
+    isolated.prisma = { message: { findUniqueOrThrow, findMany } };
+
+    const messages = await isolated.loadContext(
+      'conversation-id',
+      'response-message-id',
+      'request-message-id',
+      true,
+    );
+
+    expect(messages).toEqual([{ role: 'user', content: '本次任务提示词' }]);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+});

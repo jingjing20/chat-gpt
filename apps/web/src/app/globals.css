@@ -1391,6 +1391,58 @@ textarea:focus-visible {
   line-height: 1.4;
 }
 
+.task-notifications {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 100;
+  display: grid;
+  width: min(390px, calc(100vw - 40px));
+  gap: 10px;
+}
+
+.task-notification {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  padding: 14px 14px;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: #252826;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.48);
+}
+
+.task-notification > svg {
+  color: var(--accent);
+}
+
+.task-notification div {
+  display: grid;
+  gap: 3px;
+}
+
+.task-notification strong {
+  font-size: 14px;
+}
+
+.task-notification span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.task-notification button {
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+}
+
+.task-notification button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .task-edit-backdrop {
   position: fixed;
   z-index: 80;
@@ -1414,6 +1466,80 @@ textarea:focus-visible {
   border-radius: 24px;
   background: #202220;
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+}
+
+.task-history-dialog {
+  display: flex;
+  width: min(640px, 100%);
+  max-height: calc(100vh - 56px);
+  padding: 28px;
+  flex-direction: column;
+  gap: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 24px;
+  background: #202220;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+}
+
+.task-history-dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.task-history-dialog header span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.task-history-dialog h2 {
+  margin: 6px 0 0;
+  font-size: 22px;
+}
+
+.task-history-dialog header button {
+  padding: 7px;
+  border: 0;
+  background: transparent;
+}
+
+.task-history-list {
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.task-history-list > p {
+  color: var(--muted);
+}
+
+.task-history-list > button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 13px 14px;
+  gap: 4px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: #1a1c1b;
+  color: var(--text);
+  text-align: left;
+}
+
+.task-history-list > button:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: #222523;
+}
+
+.task-history-list strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.task-history-list time {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .task-edit-dialog header,

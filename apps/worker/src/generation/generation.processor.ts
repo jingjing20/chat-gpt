@@ -7,6 +7,7 @@ import {
   MessageRole,
   MessageStatus,
   Prisma,
+  ScheduledTaskRunStatus,
 } from '@chat/database';
 import {
   ProviderError,
@@ -100,6 +101,10 @@ export class GenerationProcessor {
       if (permit && this.reliability) await this.reliability.release(permit);
       return;
     }
+    await this.prisma.scheduledTaskRun.updateMany({
+      where: { generationId, status: ScheduledTaskRunStatus.QUEUED },
+      data: { status: ScheduledTaskRunStatus.RUNNING },
+    });
 
     let heartbeatRunning = false;
     let ownershipLost = false;
@@ -190,6 +195,8 @@ export class GenerationProcessor {
     const rawMessages = await this.loadContext(
       generation.conversationId,
       generation.responseMessageId,
+      generation.requestMessageId,
+      generation.isolatedContext,
     );
     const modelProfile = createConfiguredModelProfile({
       provider: generation.provider,
@@ -617,7 +624,21 @@ export class GenerationProcessor {
   private async loadContext(
     conversationId: string,
     responseMessageId: string,
+    requestMessageId: string,
+    isolatedContext: boolean,
   ): Promise<NormalizedChatMessage[]> {
+    if (isolatedContext) {
+      const requestMessage = await this.prisma.message.findUniqueOrThrow({
+        where: { id: requestMessageId },
+        select: { role: true, content: true },
+      });
+      return [
+        {
+          role: requestMessage.role.toLowerCase() as NormalizedChatMessage['role'],
+          content: requestMessage.content,
+        },
+      ];
+    }
     const baseWhere = {
       conversationId,
       id: { not: responseMessageId },
@@ -715,6 +736,12 @@ export class GenerationProcessor {
         },
       });
       if (transitioned.count === 0) return false;
+      const scheduledTask = await this.finishScheduledTaskRun(
+        transaction,
+        input.generationId,
+        ScheduledTaskRunStatus.COMPLETED,
+        now,
+      );
       await transaction.message.update({
         where: { id: input.responseMessageId },
         data: {
@@ -743,6 +770,7 @@ export class GenerationProcessor {
         payload: {
           finishReason: input.finishReason,
           finalContentHash: this.contentHash(input.content),
+          ...(scheduledTask ? { scheduledTask } : {}),
         },
         content: input.content,
         reasoningContent: this.savedReasoning(input.reasoningContent),
@@ -785,6 +813,12 @@ export class GenerationProcessor {
         },
       });
       if (transitioned.count === 0) return false;
+      const scheduledTask = await this.finishScheduledTaskRun(
+        transaction,
+        input.generationId,
+        ScheduledTaskRunStatus.FAILED,
+        now,
+      );
       await transaction.message.update({
         where: { id: input.responseMessageId },
         data: {
@@ -814,6 +848,7 @@ export class GenerationProcessor {
           code: input.error.code,
           retryable: input.error.retryableBeforeFirstDelta,
           safeMessage: input.error.message,
+          ...(scheduledTask ? { scheduledTask } : {}),
         },
         content: input.content,
         reasoningContent: this.savedReasoning(input.reasoningContent),
@@ -872,6 +907,12 @@ export class GenerationProcessor {
         },
       });
       if (transitioned.count === 0) return false;
+      const scheduledTask = await this.finishScheduledTaskRun(
+        transaction,
+        generationId,
+        ScheduledTaskRunStatus.CANCELLED,
+        now,
+      );
       await transaction.message.update({
         where: { id: generation.responseMessageId },
         data: {
@@ -896,7 +937,10 @@ export class GenerationProcessor {
         generationId,
         messageId: generation.responseMessageId,
         type: 'generation.cancelled',
-        payload: { partial: Boolean(content || reasoningContent) },
+        payload: {
+          partial: Boolean(content || reasoningContent),
+          ...(scheduledTask ? { scheduledTask } : {}),
+        },
         content,
         reasoningContent: this.savedReasoning(reasoningContent),
         status: 'CANCELLED',
@@ -904,6 +948,37 @@ export class GenerationProcessor {
       return true;
     });
     if (!cancelled) return;
+  }
+
+  private async finishScheduledTaskRun(
+    transaction: Prisma.TransactionClient,
+    generationId: string,
+    status:
+      | typeof ScheduledTaskRunStatus.COMPLETED
+      | typeof ScheduledTaskRunStatus.FAILED
+      | typeof ScheduledTaskRunStatus.CANCELLED,
+    completedAt: Date,
+  ) {
+    const run = await transaction.scheduledTaskRun.findUnique({
+      where: { generationId },
+      select: {
+        id: true,
+        taskId: true,
+        trigger: true,
+        task: { select: { title: true } },
+      },
+    });
+    if (!run) return null;
+    await transaction.scheduledTaskRun.update({
+      where: { id: run.id },
+      data: { status, completedAt },
+    });
+    return {
+      runId: run.id,
+      taskId: run.taskId,
+      title: run.task.title,
+      trigger: run.trigger,
+    };
   }
 
   private async createUsage(

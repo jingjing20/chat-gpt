@@ -248,6 +248,7 @@ export const updateScheduledTaskStatusRequestSchema = z.object({
 export const scheduledTaskResponseSchema = z.object({
   id: z.string().uuid(),
   conversationId: z.string().uuid(),
+  executionConversationId: z.string().uuid().nullable(),
   title: conversationTitleSchema,
   prompt: z.string(),
   cadence: scheduledTaskCadenceSchema,
@@ -262,6 +263,20 @@ export const scheduledTaskResponseSchema = z.object({
 export const scheduledTaskListResponseSchema = z.object({
   items: z.array(scheduledTaskResponseSchema),
 });
+export const scheduledTaskRunResponseSchema = z.object({
+  id: z.string().uuid(),
+  taskId: z.string().uuid(),
+  conversationId: z.string().uuid(),
+  generationId: z.string().uuid(),
+  trigger: z.enum(['MANUAL', 'SCHEDULED']),
+  status: z.enum(['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']),
+  scheduledFor: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  completedAt: z.string().datetime().nullable(),
+});
+export const scheduledTaskRunListResponseSchema = z.object({
+  items: z.array(scheduledTaskRunResponseSchema),
+});
 export type ScheduledTaskStatus = z.infer<typeof scheduledTaskStatusSchema>;
 export type ScheduledTaskCadence = z.infer<typeof scheduledTaskCadenceSchema>;
 export type CreateScheduledTaskRequest = z.infer<
@@ -271,6 +286,9 @@ export type UpdateScheduledTaskRequest = z.infer<
   typeof updateScheduledTaskRequestSchema
 >;
 export type ScheduledTaskResponse = z.infer<typeof scheduledTaskResponseSchema>;
+export type ScheduledTaskRunResponse = z.infer<
+  typeof scheduledTaskRunResponseSchema
+>;
 
 export const generationAttemptResponseSchema = z.object({
   id: z.string().uuid(),
